@@ -154,7 +154,7 @@ CanonicalMetricMeasurement measure_canonical_export_metrics(
     const auto artifact_validation = exporting::validate_encoded_export_artifact(
         export_request, source_output, export_artifact, export_limits, export_execution_limits);
     if (!artifact_validation.ok()) {
-        return {{QualityCertificateError::InvalidExportArtifact, 0U}, 0U, 0U, 0U, {}};
+        return {QualityCertificateError::InvalidExportArtifact, 0U, 0U, 0U, 0U, {}};
     }
 
     const std::uint64_t output_bytes = static_cast<std::uint64_t>(export_artifact.bytes.size());
@@ -187,9 +187,11 @@ CanonicalMetricMeasurement measure_canonical_export_metrics(
         export_execution_limits.max_execution_units,
         measurement.metrics.size(),
     };
-    measurement.validation = validate_quality_certificate_request(
+    const auto validation = validate_quality_certificate_request(
         measured_request, export_request, source_output, export_artifact, measurement_limits, export_limits,
         export_execution_limits);
+    measurement.error = validation.error;
+    measurement.metric_index = validation.metric_index;
     return measurement;
 }
 
