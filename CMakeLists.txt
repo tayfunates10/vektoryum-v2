@@ -14,6 +14,7 @@ add_library(vektoryum_core STATIC
     src/core/image.cpp
     src/core/tile.cpp
     src/io/limits.cpp
+    src/resample/resampler.cpp
     src/version.cpp
 )
 
@@ -64,7 +65,10 @@ endif()
 
 enable_testing()
 
-add_executable(vektoryum_tests tests/test_main.cpp)
+add_executable(vektoryum_tests
+    tests/test_main.cpp
+    tests/test_resampler.cpp
+)
 target_link_libraries(vektoryum_tests PRIVATE vektoryum_core)
 vektoryum_apply_warnings(vektoryum_tests)
 
