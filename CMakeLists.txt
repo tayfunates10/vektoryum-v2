@@ -16,6 +16,7 @@ add_library(vektoryum_core STATIC
     src/core/tile.cpp
     src/io/limits.cpp
     src/resample/resampler.cpp
+    src/vector/path_quality.cpp
     src/vector/reconstruction.cpp
     src/version.cpp
 )
