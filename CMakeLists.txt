@@ -121,6 +121,12 @@ add_executable(vektoryum_hybrid_output_contract_tests
 target_link_libraries(vektoryum_hybrid_output_contract_tests PRIVATE vektoryum_core)
 vektoryum_apply_warnings(vektoryum_hybrid_output_contract_tests)
 
+add_executable(vektoryum_hybrid_mixed_content_tests
+    tests/test_hybrid_mixed_content.cpp
+)
+target_link_libraries(vektoryum_hybrid_mixed_content_tests PRIVATE vektoryum_core)
+vektoryum_apply_warnings(vektoryum_hybrid_mixed_content_tests)
+
 if(VEKTORYUM_ENABLE_SANITIZERS AND NOT MSVC)
     target_compile_options(vektoryum_tests PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
     target_link_options(vektoryum_tests PRIVATE -fsanitize=address,undefined)
@@ -134,6 +140,8 @@ if(VEKTORYUM_ENABLE_SANITIZERS AND NOT MSVC)
     target_link_options(vektoryum_alpha_composite_tests PRIVATE -fsanitize=address,undefined)
     target_compile_options(vektoryum_hybrid_output_contract_tests PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
     target_link_options(vektoryum_hybrid_output_contract_tests PRIVATE -fsanitize=address,undefined)
+    target_compile_options(vektoryum_hybrid_mixed_content_tests PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+    target_link_options(vektoryum_hybrid_mixed_content_tests PRIVATE -fsanitize=address,undefined)
 endif()
 
 add_test(NAME vektoryum.unit COMMAND vektoryum_tests)
@@ -142,3 +150,4 @@ add_test(NAME vektoryum.benchmark_contract COMMAND vektoryum_benchmark_contract_
 add_test(NAME vektoryum.hybrid_plan COMMAND vektoryum_hybrid_plan_tests)
 add_test(NAME vektoryum.alpha_composite COMMAND vektoryum_alpha_composite_tests)
 add_test(NAME vektoryum.hybrid_output_contract COMMAND vektoryum_hybrid_output_contract_tests)
+add_test(NAME vektoryum.hybrid_mixed_content COMMAND vektoryum_hybrid_mixed_content_tests)
