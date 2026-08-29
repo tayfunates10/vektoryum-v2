@@ -16,6 +16,7 @@ using vektoryum::certification::QualityCertificateError;
 using vektoryum::certification::QualityCertificateRequest;
 using vektoryum::certification::canonical_quality_certificate_report;
 using vektoryum::certification::issue_quality_certificate;
+using vektoryum::certification::measure_canonical_export_metrics;
 using vektoryum::certification::validate_quality_certificate_request;
 using vektoryum::exporting::EncodedExportArtifact;
 using vektoryum::exporting::ExportFormat;
@@ -27,6 +28,7 @@ using vektoryum::hybrid::HybridOutputManifest;
     HybridOutputManifest output{};
     output.output_id = "hybrid-output-0001";
     output.output_sha256 = std::string(64U, 'a');
+    output.seam_error = 0.005;
     return output;
 }
 
@@ -81,6 +83,57 @@ int main() {
 
     if (!validate(request).ok()) {
         std::cerr << "valid certificate request rejected\n";
+        return EXIT_FAILURE;
+    }
+
+    const auto measured_a = measure_canonical_export_metrics(export_request_value, source, artifact);
+    const auto measured_b = measure_canonical_export_metrics(export_request_value, source, artifact);
+    if (!measured_a.ok() || !measured_b.ok()) {
+        std::cerr << "canonical metric measurement rejected valid Stage 10 artifact\n";
+        return EXIT_FAILURE;
+    }
+    if (measured_a.sample_count != 1024U || measured_a.execution_units != artifact.execution_units ||
+        measured_a.peak_memory_bytes != artifact.peak_intermediate_bytes || measured_a.metrics.size() != 4U) {
+        std::cerr << "canonical metric resource evidence mismatch\n";
+        return EXIT_FAILURE;
+    }
+    if (measured_a.metrics[0].name != "export_bytes" ||
+        measured_a.metrics[0].measured != static_cast<double>(artifact.bytes.size()) ||
+        measured_a.metrics[1].name != "peak_intermediate_bytes" ||
+        measured_a.metrics[1].measured != static_cast<double>(artifact.peak_intermediate_bytes) ||
+        measured_a.metrics[2].name != "seam_error" || measured_a.metrics[2].measured != source.seam_error ||
+        measured_a.metrics[3].name != "work_units" ||
+        measured_a.metrics[3].measured != static_cast<double>(artifact.execution_units)) {
+        std::cerr << "canonical metric values do not bind Stage 10 output\n";
+        return EXIT_FAILURE;
+    }
+    if (measured_a.metrics.size() != measured_b.metrics.size()) {
+        std::cerr << "canonical metric repeatability failed\n";
+        return EXIT_FAILURE;
+    }
+    for (std::size_t i = 0U; i < measured_a.metrics.size(); ++i) {
+        if (measured_a.metrics[i].name != measured_b.metrics[i].name ||
+            measured_a.metrics[i].measured != measured_b.metrics[i].measured ||
+            measured_a.metrics[i].minimum != measured_b.metrics[i].minimum ||
+            measured_a.metrics[i].maximum != measured_b.metrics[i].maximum) {
+            std::cerr << "canonical metric evidence is not repeatable\n";
+            return EXIT_FAILURE;
+        }
+    }
+
+    auto tampered_measurement_artifact = artifact;
+    tampered_measurement_artifact.bytes.push_back('x');
+    if (measure_canonical_export_metrics(export_request_value, source, tampered_measurement_artifact).error !=
+        QualityCertificateError::InvalidExportArtifact) {
+        std::cerr << "tampered artifact produced quality metrics\n";
+        return EXIT_FAILURE;
+    }
+
+    auto excessive_seam_source = source;
+    excessive_seam_source.seam_error = 0.02;
+    if (measure_canonical_export_metrics(export_request_value, excessive_seam_source, artifact).error !=
+        QualityCertificateError::ThresholdViolation) {
+        std::cerr << "excessive seam evidence passed concrete metric gate\n";
         return EXIT_FAILURE;
     }
 
