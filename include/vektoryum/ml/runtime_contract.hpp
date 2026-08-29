@@ -22,6 +22,10 @@ enum class RuntimeError : std::uint8_t {
     ArtifactDigestMismatch,
     ModelNotLoaded,
     TensorElementCountMismatch,
+    InvalidTensorLayout,
+    InvalidChannelContract,
+    InvalidNormalization,
+    InvalidPostprocessRange,
 };
 
 enum class ExecutionProvider : std::uint8_t {
@@ -30,6 +34,12 @@ enum class ExecutionProvider : std::uint8_t {
     Cuda,
     DirectML,
     CoreML,
+};
+
+enum class TensorLayout : std::uint8_t {
+    Unknown,
+    Nchw,
+    Nhwc,
 };
 
 struct TensorShape {
@@ -55,11 +65,27 @@ struct RuntimeBinding {
     bool fallback_used{false};
 };
 
+struct PreprocessContract {
+    TensorLayout layout{TensorLayout::Unknown};
+    std::uint32_t channels{0U};
+    std::vector<float> mean{};
+    std::vector<float> scale{};
+};
+
+struct PostprocessContract {
+    TensorLayout layout{TensorLayout::Unknown};
+    std::uint32_t channels{0U};
+    float output_min{0.0F};
+    float output_max{1.0F};
+};
+
 struct ExecutionContract {
     ModelDescriptor model{};
     TensorShape input{};
     TensorShape output{};
     RuntimeBinding binding{};
+    PreprocessContract preprocess{};
+    PostprocessContract postprocess{};
 };
 
 struct ModelLoadReceipt {
@@ -92,6 +118,18 @@ struct ContractValidation {
     const ModelDescriptor& model,
     const TensorShape& input,
     RuntimeLimits limits = {}) noexcept;
+
+// Validates preprocessing layout/channel semantics and finite per-channel
+// normalization vectors against the declared input tensor shape.
+[[nodiscard]] ContractValidation validate_preprocess_contract(
+    const PreprocessContract& preprocess,
+    const TensorShape& input) noexcept;
+
+// Validates postprocessing layout/channel semantics and a finite, ordered output
+// range against the declared output tensor shape.
+[[nodiscard]] ContractValidation validate_postprocess_contract(
+    const PostprocessContract& postprocess,
+    const TensorShape& output) noexcept;
 
 // Validates the execution boundary without selecting or substituting providers.
 // A provider mismatch or any reported fallback is rejected: callers must make
