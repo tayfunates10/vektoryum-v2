@@ -48,11 +48,28 @@ struct RequestValidation {
     [[nodiscard]] bool ok() const noexcept { return error == RequestError::None; }
 };
 
+enum class ResponseStatus : std::uint8_t {
+    Success = 0,
+    Error = 1,
+};
+
+struct ResponseEnvelope {
+    std::string schema_version;
+    std::string request_id;
+    Operation operation{Operation::Unspecified};
+    ResponseStatus status{ResponseStatus::Error};
+    ExitCode exit_code{ExitCode::Software};
+    RequestError error{RequestError::UnsupportedOperation};
+};
+
 [[nodiscard]] RequestValidation validate_request_envelope(
     const RequestEnvelope& request,
     const RequestLimits& limits = {}) noexcept;
 
 [[nodiscard]] std::string canonical_request_report(const RequestEnvelope& request);
+[[nodiscard]] std::string canonical_response_report(const ResponseEnvelope& response);
 [[nodiscard]] std::string_view operation_name(Operation operation) noexcept;
+[[nodiscard]] std::string_view request_error_name(RequestError error) noexcept;
+[[nodiscard]] std::string_view response_status_name(ResponseStatus status) noexcept;
 
 }  // namespace vektoryum::api
