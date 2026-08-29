@@ -23,8 +23,12 @@ void expect_true(bool condition, std::string_view) {
     manifest.dataset_version = "1";
     manifest.model_id = "reference-model";
     manifest.model_version = "1";
+    manifest.architecture_revision = "arch-001";
+    manifest.training_code_revision = "code-001";
+    manifest.degradation_pipeline_revision = "degradation-001";
     manifest.runtime_id = "vektoryum-reference";
     manifest.runtime_version = "1";
+    manifest.artifact_sha256 = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
     manifest.seed = 0x5A17U;
     manifest.max_steps = 1'000U;
     manifest.batch_size = 16U;
@@ -48,9 +52,29 @@ int main() {
     expect_true(validate_training_run_manifest(invalid).error == TrainingRunContractError::MissingDatasetIdentity,
                 "dataset identity");
     invalid = baseline;
+    invalid.architecture_revision.clear();
+    expect_true(validate_training_run_manifest(invalid).error == TrainingRunContractError::MissingArchitectureRevision,
+                "architecture revision");
+    invalid = baseline;
+    invalid.training_code_revision.clear();
+    expect_true(validate_training_run_manifest(invalid).error == TrainingRunContractError::MissingTrainingCodeRevision,
+                "training code revision");
+    invalid = baseline;
+    invalid.degradation_pipeline_revision.clear();
+    expect_true(validate_training_run_manifest(invalid).error == TrainingRunContractError::MissingDegradationPipelineRevision,
+                "degradation pipeline revision");
+    invalid = baseline;
     invalid.runtime_id.clear();
     expect_true(validate_training_run_manifest(invalid).error == TrainingRunContractError::MissingRuntimeIdentity,
                 "runtime identity");
+    invalid = baseline;
+    invalid.artifact_sha256.clear();
+    expect_true(validate_training_run_manifest(invalid).error == TrainingRunContractError::MissingArtifactChecksum,
+                "missing artifact checksum");
+    invalid = baseline;
+    invalid.artifact_sha256[0] = 'G';
+    expect_true(validate_training_run_manifest(invalid).error == TrainingRunContractError::InvalidArtifactChecksum,
+                "invalid artifact checksum");
     invalid = baseline;
     invalid.max_steps = 0U;
     expect_true(validate_training_run_manifest(invalid).error == TrainingRunContractError::ZeroMaxSteps,
