@@ -2,6 +2,9 @@
 
 #include <algorithm>
 #include <cmath>
+#include <iomanip>
+#include <limits>
+#include <locale>
 #include <sstream>
 
 namespace vektoryum::certification {
@@ -16,18 +19,23 @@ namespace {
     });
 }
 
+[[nodiscard]] bool contains_report_delimiter(const std::string& value) {
+    return value.find_first_of("\n\r\0", 0U, 3U) != std::string::npos;
+}
+
 }  // namespace
 
 QualityCertificateValidation validate_quality_certificate_request(
     const QualityCertificateRequest& request,
     const QualityCertificateLimits& limits) {
-    if (request.schema_version.empty() || request.certificate_id.empty()) {
+    if (request.schema_version.empty() || request.certificate_id.empty() ||
+        contains_report_delimiter(request.schema_version) || contains_report_delimiter(request.certificate_id)) {
         return {QualityCertificateError::MissingIdentity, 0U};
     }
     if (!is_lower_hex_sha256(request.input_sha256) || !is_lower_hex_sha256(request.output_sha256)) {
         return {QualityCertificateError::InvalidDigest, 0U};
     }
-    if (request.toolchain_revision.empty()) {
+    if (request.toolchain_revision.empty() || contains_report_delimiter(request.toolchain_revision)) {
         return {QualityCertificateError::MissingToolchainRevision, 0U};
     }
     if (request.sample_count == 0U) {
@@ -52,8 +60,8 @@ QualityCertificateValidation validate_quality_certificate_request(
     std::string previous_name;
     for (std::size_t index = 0U; index < request.metrics.size(); ++index) {
         const auto& metric = request.metrics[index];
-        if (metric.name.empty() || !std::isfinite(metric.measured) || !std::isfinite(metric.minimum) ||
-            !std::isfinite(metric.maximum) || metric.minimum > metric.maximum) {
+        if (metric.name.empty() || contains_report_delimiter(metric.name) || !std::isfinite(metric.measured) ||
+            !std::isfinite(metric.minimum) || !std::isfinite(metric.maximum) || metric.minimum > metric.maximum) {
             return {QualityCertificateError::InvalidMetric, index};
         }
         if (!previous_name.empty()) {
@@ -74,6 +82,8 @@ QualityCertificateValidation validate_quality_certificate_request(
 
 std::string canonical_quality_certificate_report(const QualityCertificateRequest& request) {
     std::ostringstream report;
+    report.imbue(std::locale::classic());
+    report << std::setprecision(std::numeric_limits<double>::max_digits10);
     report << "schema_version=" << request.schema_version << '\n';
     report << "certificate_id=" << request.certificate_id << '\n';
     report << "input_sha256=" << request.input_sha256 << '\n';
