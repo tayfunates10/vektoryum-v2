@@ -1,3 +1,4 @@
+#include <cstdint>
 #include <iostream>
 #include <limits>
 #include <string_view>
@@ -221,10 +222,24 @@ int run_ml_runtime_tests() {
                     inference_repeat.output_tensor_elements == inference_valid.output_tensor_elements,
                 "inference boundary validation is deterministic");
 
+    const std::vector<std::uint8_t> model_artifact{0x56U, 0x4bU, 0x54U, 0x4dU};
     DeterministicReferenceRuntime runtime;
     expect_true(!runtime.loaded(), "reference runtime starts unloaded");
-    expect_true(runtime.load(load) == RuntimeError::None && runtime.loaded(),
-                "reference runtime owns verified loaded-model state");
+    expect_true(runtime.load(load, model_artifact) == RuntimeError::None && runtime.loaded(),
+                "reference runtime owns verified loaded-model artifact state");
+
+    DeterministicReferenceRuntime empty_artifact_runtime;
+    expect_true(empty_artifact_runtime.load(load, {}) == RuntimeError::EmptyModelArtifact &&
+                    !empty_artifact_runtime.loaded(),
+                "reference runtime rejects empty model artifacts");
+
+    DeterministicReferenceRuntime bounded_artifact_runtime;
+    RuntimeLimits tiny_artifact_limit{};
+    tiny_artifact_limit.max_model_artifact_bytes = 3U;
+    expect_true(bounded_artifact_runtime.load(load, model_artifact, tiny_artifact_limit) ==
+                    RuntimeError::ModelArtifactBudgetExceeded &&
+                    !bounded_artifact_runtime.loaded(),
+                "reference runtime rejects model artifacts over the configured byte budget");
 
     const std::vector<float> runtime_input(196608U, 0.75F);
     const auto runtime_result = runtime.execute(execution, runtime_input);
@@ -244,12 +259,12 @@ int run_ml_runtime_tests() {
 
     auto unsupported_load = load;
     unsupported_load.binding.backend_id = "other-backend";
-    expect_true(runtime.load(unsupported_load) == RuntimeError::UnsupportedExecution,
+    expect_true(runtime.load(unsupported_load, model_artifact) == RuntimeError::UnsupportedExecution,
                 "reference runtime rejects backend substitution without fallback");
 
     runtime.unload();
     expect_true(!runtime.loaded() && runtime.execute(execution, runtime_input).error == RuntimeError::ModelNotLoaded,
-                "reference runtime unload fails closed before execution");
+                "reference runtime unload clears artifact ownership and fails closed before execution");
 
     return failures;
 }
