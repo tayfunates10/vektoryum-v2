@@ -15,6 +15,8 @@ struct PointI {
 
 struct Contour {
     std::vector<PointI> points{};
+
+    friend bool operator==(const Contour&, const Contour&) = default;
 };
 
 enum class VectorizeError : std::uint8_t {
