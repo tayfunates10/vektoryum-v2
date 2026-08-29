@@ -63,17 +63,67 @@ int run_ml_runtime_tests() {
 
     const RuntimeBinding binding{
         "vektoryum-reference", ExecutionProvider::Cpu, ExecutionProvider::Cpu, true, false};
+    const PreprocessContract preprocess{
+        TensorLayout::Nchw,
+        3U,
+        {0.5F, 0.5F, 0.5F},
+        {0.5F, 0.5F, 0.5F}};
+    const PostprocessContract postprocess{TensorLayout::Nchw, 3U, 0.0F, 1.0F};
     const ExecutionContract execution{
         model,
         input,
         TensorShape{{1U, 3U, 512U, 512U}},
-        binding};
+        binding,
+        preprocess,
+        postprocess};
     const auto execution_valid = validate_execution_contract(execution);
     expect_true(execution_valid.ok(), "explicit deterministic provider binding accepted");
     expect_true(execution_valid.tensor_elements == 196608U,
                 "execution contract preserves input element accounting");
     expect_true(execution_valid.output_tensor_elements == 786432U,
                 "execution contract accounts output tensor exactly");
+
+    const auto preprocess_valid = validate_preprocess_contract(preprocess, input);
+    expect_true(preprocess_valid.ok(), "finite NCHW preprocessing contract accepted");
+    expect_true(validate_postprocess_contract(postprocess, execution.output).ok(),
+                "bounded NCHW postprocessing contract accepted");
+
+    auto bad_preprocess = preprocess;
+    bad_preprocess.layout = TensorLayout::Nhwc;
+    expect_true(validate_preprocess_contract(bad_preprocess, input).error ==
+                    RuntimeError::InvalidChannelContract,
+                "layout and tensor channel mismatch rejected");
+
+    bad_preprocess = preprocess;
+    bad_preprocess.mean.pop_back();
+    expect_true(validate_preprocess_contract(bad_preprocess, input).error ==
+                    RuntimeError::InvalidNormalization,
+                "incomplete normalization vector rejected");
+
+    bad_preprocess = preprocess;
+    bad_preprocess.scale[1U] = 0.0F;
+    expect_true(validate_preprocess_contract(bad_preprocess, input).error ==
+                    RuntimeError::InvalidNormalization,
+                "zero normalization scale rejected");
+
+    bad_preprocess = preprocess;
+    bad_preprocess.mean[0U] = std::numeric_limits<float>::quiet_NaN();
+    expect_true(validate_preprocess_contract(bad_preprocess, input).error ==
+                    RuntimeError::InvalidNormalization,
+                "non-finite normalization rejected");
+
+    auto bad_postprocess = postprocess;
+    bad_postprocess.output_min = 2.0F;
+    bad_postprocess.output_max = 1.0F;
+    expect_true(validate_postprocess_contract(bad_postprocess, execution.output).error ==
+                    RuntimeError::InvalidPostprocessRange,
+                "reversed postprocess range rejected");
+
+    bad_postprocess = postprocess;
+    bad_postprocess.output_max = std::numeric_limits<float>::infinity();
+    expect_true(validate_postprocess_contract(bad_postprocess, execution.output).error ==
+                    RuntimeError::InvalidPostprocessRange,
+                "non-finite postprocess range rejected");
 
     auto bad_execution = execution;
     bad_execution.binding.backend_id.clear();
@@ -99,6 +149,18 @@ int run_ml_runtime_tests() {
     bad_execution.output = TensorShape{};
     expect_true(validate_execution_contract(bad_execution).error == RuntimeError::InvalidOutputTensor,
                 "empty output tensor contract rejected");
+
+    bad_execution = execution;
+    bad_execution.preprocess.channels = 4U;
+    expect_true(validate_execution_contract(bad_execution).error == RuntimeError::InvalidChannelContract,
+                "execution rejects mismatched preprocessing channels");
+
+    bad_execution = execution;
+    bad_execution.postprocess.output_min = 3.0F;
+    bad_execution.postprocess.output_max = 2.0F;
+    expect_true(validate_execution_contract(bad_execution).error ==
+                    RuntimeError::InvalidPostprocessRange,
+                "execution rejects invalid postprocess range");
 
     const auto execution_repeat = validate_execution_contract(execution);
     expect_true(execution_repeat.error == execution_valid.error &&
