@@ -1,10 +1,10 @@
 # Vektoryum v2
 
-Core Engine progress: **26%**
+Core Engine progress: **31%**
 
-Completed: Stages 0, 1, 2, 3.
+Completed: Stages 0, 1, 2, 3, 4.
 
-Active: **Stage 4 — Content Analyzer & deterministic router**.
+Active: **Stage 5 — Vector reconstruction**.
 
 Workflow: branch → pull request → CI → merge only after all required checks pass.
 
@@ -16,8 +16,8 @@ Workflow: branch → pull request → CI → merge only after all required check
 | 1 | Repository foundation and CI | 6% | done |
 | 2 | Image Core | 8% | done |
 | 3 | Raster resampler | 8% | done |
-| 4 | Content analyzer/router | 5% | active |
-| 5 | Vector reconstruction | 12% | planned |
+| 4 | Content analyzer/router | 5% | done |
+| 5 | Vector reconstruction | 12% | active |
 | 6 | Photo restoration and non-ML SR | 12% | planned |
 | 7 | Vektoryum ML/DL model/runtime | 14% | planned |
 | 8 | Training/data/benchmark pipeline | 7% | planned |
@@ -33,5 +33,6 @@ Workflow: branch → pull request → CI → merge only after all required check
 - 10%: Stage 1 merged in PR #2 after required CI passed.
 - 18%: Stage 2 merged in PR #3 after required CI passed.
 - 26%: Stage 3 merged in PR #4 after source hygiene, cross-platform build/tests, sanitizers, deterministic 2x/4x/8x scaling, edge overshoot and checkerboard antialias gates passed.
+- 31%: Stage 4 merged in PR #5 after deterministic content routing, mixed-vs-photo precedence, alpha-defined silhouette routing, cross-platform build/tests and ASan/UBSan all passed with zero unresolved review threads.
 
-Next: implement Stage 4 with deterministic photo/logo/line-art/mixed classification, confidence scoring and conservative fallback routing.
+Next: implement Stage 5 with project-owned raster-to-vector reconstruction primitives, topology-safe contour extraction, deterministic path simplification, rasterize-back fidelity checks and SVG-ready geometry contracts.
