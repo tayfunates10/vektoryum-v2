@@ -38,6 +38,10 @@ int run_content_analyzer_tests() {
     expect_true(mixed.kind == ContentKind::Mixed && mixed.route == ProcessingRoute::Hybrid,
                 "mixed feature vector uses hybrid route");
 
+    const auto alpha_defined = classify_features({0.0, 0.90, 0.06, 0.0, 0.18});
+    expect_true(alpha_defined.route == ProcessingRoute::VectorReconstruction,
+                "alpha-defined silhouette uses vector reconstruction");
+
     const auto uncertain = classify_features({0.01, 0.40, 0.05, 0.01, 0.0});
     expect_true(uncertain.kind == ContentKind::Uncertain &&
                     uncertain.route == ProcessingRoute::ConservativeRaster,
@@ -57,6 +61,20 @@ int run_content_analyzer_tests() {
                 "analysis is deterministic for identical input");
     expect_true(first.route == ProcessingRoute::ConservativeRaster,
                 "ambiguous flat image remains conservative");
+
+    std::vector<float> alpha_silhouette(4U * 4U * 4U, 0.5F);
+    for (std::uint32_t y = 0U; y < 4U; ++y) {
+        for (std::uint32_t x = 0U; x < 4U; ++x) {
+            const std::size_t index = (static_cast<std::size_t>(y) * 4U + x) * 4U;
+            alpha_silhouette[index + 3U] = x < 2U ? 0.0F : 1.0F;
+        }
+    }
+    const auto rgba_shape = analyze_rgb_f32(alpha_silhouette, 4U, 4U, 4U);
+    expect_true(rgba_shape.valid && rgba_shape.features.edge_density == 0.0 &&
+                    rgba_shape.features.alpha_transition_ratio > 0.0,
+                "RGBA silhouette exposes alpha-only structural edges");
+    expect_true(rgba_shape.route == ProcessingRoute::VectorReconstruction,
+                "RGBA alpha-only silhouette routes to vector reconstruction");
 
     const auto bad_shape = analyze_rgb_f32(flat_rgb, 4U, 4U, 4U);
     expect_true(!bad_shape.valid, "mismatched buffer shape is rejected");
