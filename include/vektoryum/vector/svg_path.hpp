@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <span>
 #include <string>
 #include <vector>
 
@@ -64,6 +65,40 @@ struct SvgFitResult {
 [[nodiscard]] SvgFitResult fit_svg_paths(
     const VectorScene& scene,
     SvgFitOptions options = {});
+
+enum class SvgCertificationError : std::uint8_t {
+    None,
+    InvalidScene,
+    InvalidReference,
+    CertificationBudgetExceeded,
+    FidelityRejected,
+};
+
+struct SvgCertificationOptions {
+    double min_iou{0.995};
+    double max_disagreement_ratio{0.005};
+    std::uint64_t max_certification_pixels{16'777'216U};
+    std::uint32_t cubic_subdivisions{24U};
+};
+
+struct SvgCertificationReport {
+    SvgCertificationError error{SvgCertificationError::None};
+    double raster_iou{};
+    double disagreement_ratio{};
+    std::uint64_t compared_pixels{};
+
+    [[nodiscard]] bool passed() const noexcept { return error == SvgCertificationError::None; }
+};
+
+// Rasterizes the SVG-ready scene with deterministic cubic subdivision and
+// even-odd filling, then compares it to the source mask. Curved candidates are
+// production-eligible only when this report passes the configured fidelity gate.
+[[nodiscard]] SvgCertificationReport certify_svg_scene(
+    const SvgScene& scene,
+    std::span<const std::uint8_t> reference_mask,
+    std::uint32_t width,
+    std::uint32_t height,
+    SvgCertificationOptions options = {});
 
 // Deterministic path-data serialization suitable for embedding in an SVG path
 // element. Coordinates are emitted with fixed six-decimal precision.
