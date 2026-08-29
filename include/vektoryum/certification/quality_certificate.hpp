@@ -74,6 +74,15 @@ struct QualityCertificateIssueResult {
     [[nodiscard]] bool ok() const noexcept { return validation.ok(); }
 };
 
+struct CanonicalMetricMeasurement {
+    QualityCertificateValidation validation{};
+    std::uint64_t sample_count{0U};
+    std::uint64_t execution_units{0U};
+    std::uint64_t peak_memory_bytes{0U};
+    std::vector<MetricGate> metrics;
+    [[nodiscard]] bool ok() const noexcept { return validation.ok(); }
+};
+
 [[nodiscard]] QualityCertificateValidation validate_quality_certificate_request(
     const QualityCertificateRequest& request,
     const exporting::ExportRequest& export_request,
@@ -89,6 +98,12 @@ struct QualityCertificateIssueResult {
     const hybrid::HybridOutputManifest& source_output,
     const exporting::EncodedExportArtifact& export_artifact,
     const QualityCertificateLimits& limits = {},
+    const exporting::ExportLimits& export_limits = {},
+    const exporting::ExportExecutionLimits& export_execution_limits = {});
+[[nodiscard]] CanonicalMetricMeasurement measure_canonical_export_metrics(
+    const exporting::ExportRequest& export_request,
+    const hybrid::HybridOutputManifest& source_output,
+    const exporting::EncodedExportArtifact& export_artifact,
     const exporting::ExportLimits& export_limits = {},
     const exporting::ExportExecutionLimits& export_execution_limits = {});
 
