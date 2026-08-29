@@ -6,6 +6,9 @@
 #include <limits>
 #include <locale>
 #include <sstream>
+#include <utility>
+
+#include "vektoryum/ml/artifact_digest.hpp"
 
 namespace vektoryum::certification {
 namespace {
@@ -115,6 +118,31 @@ std::string canonical_quality_certificate_report(const QualityCertificateRequest
         report << "metric[" << index << "].maximum=" << metric.maximum << '\n';
     }
     return report.str();
+}
+
+QualityCertificateIssueResult issue_quality_certificate(
+    const QualityCertificateRequest& request,
+    const exporting::ExportRequest& export_request,
+    const hybrid::HybridOutputManifest& source_output,
+    const exporting::EncodedExportArtifact& export_artifact,
+    const QualityCertificateLimits& limits,
+    const exporting::ExportLimits& export_limits,
+    const exporting::ExportExecutionLimits& export_execution_limits) {
+    const QualityCertificateValidation validation = validate_quality_certificate_request(
+        request, export_request, source_output, export_artifact, limits, export_limits, export_execution_limits);
+    if (!validation.ok()) {
+        return {validation, {}};
+    }
+
+    const std::string report = canonical_quality_certificate_report(request);
+    QualityCertificateArtifact artifact;
+    artifact.certificate_id = request.certificate_id;
+    artifact.input_sha256 = request.input_sha256;
+    artifact.output_sha256 = request.output_sha256;
+    artifact.toolchain_revision = request.toolchain_revision;
+    artifact.canonical_bytes.assign(report.begin(), report.end());
+    artifact.certificate_sha256 = ml::sha256_hex(artifact.canonical_bytes);
+    return {validation, std::move(artifact)};
 }
 
 }  // namespace vektoryum::certification
