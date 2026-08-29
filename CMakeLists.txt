@@ -14,6 +14,10 @@ add_library(vektoryum_core STATIC
     src/core/color.cpp
     src/core/image.cpp
     src/core/tile.cpp
+    src/export/canonical_encoder.cpp
+    src/export/export_artifact_contract.cpp
+    src/export/export_contract.cpp
+    src/export/export_destination_contract.cpp
     src/hybrid/alpha_composite.cpp
     src/hybrid/hybrid_output_contract.cpp
     src/hybrid/hybrid_plan.cpp
@@ -31,11 +35,7 @@ add_library(vektoryum_core STATIC
     src/version.cpp
 )
 
-target_include_directories(vektoryum_core
-    PUBLIC
-        ${CMAKE_CURRENT_SOURCE_DIR}/include
-)
-
+target_include_directories(vektoryum_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
 target_compile_features(vektoryum_core PUBLIC cxx_std_20)
 
 function(vektoryum_apply_warnings target)
@@ -45,15 +45,7 @@ function(vektoryum_apply_warnings target)
             target_compile_options(${target} PRIVATE /WX)
         endif()
     else()
-        target_compile_options(${target} PRIVATE
-            -Wall
-            -Wextra
-            -Wpedantic
-            -Wconversion
-            -Wsign-conversion
-            -Wshadow
-            -Wformat=2
-        )
+        target_compile_options(${target} PRIVATE -Wall -Wextra -Wpedantic -Wconversion -Wsign-conversion -Wshadow -Wformat=2)
         if(VEKTORYUM_WARNINGS_AS_ERRORS)
             target_compile_options(${target} PRIVATE -Werror)
         endif()
@@ -78,70 +70,66 @@ endif()
 
 enable_testing()
 
-add_executable(vektoryum_tests
-    tests/test_main.cpp
-    tests/test_resampler.cpp
-    tests/test_content_analyzer.cpp
-    tests/test_photo_restoration.cpp
-    tests/test_ml_runtime.cpp
-    tests/test_dataset_contract.cpp
-    tests/test_vector_reconstruction.cpp
-    tests/test_svg_path.cpp
-)
+add_executable(vektoryum_tests tests/test_main.cpp tests/test_resampler.cpp tests/test_content_analyzer.cpp tests/test_photo_restoration.cpp tests/test_ml_runtime.cpp tests/test_dataset_contract.cpp tests/test_vector_reconstruction.cpp tests/test_svg_path.cpp)
 target_link_libraries(vektoryum_tests PRIVATE vektoryum_core)
 vektoryum_apply_warnings(vektoryum_tests)
 
-add_executable(vektoryum_training_contract_tests
-    tests/test_training_run_contract.cpp
-)
+add_executable(vektoryum_training_contract_tests tests/test_training_run_contract.cpp)
 target_link_libraries(vektoryum_training_contract_tests PRIVATE vektoryum_core)
 vektoryum_apply_warnings(vektoryum_training_contract_tests)
 
-add_executable(vektoryum_benchmark_contract_tests
-    tests/test_benchmark_result_contract.cpp
-)
+add_executable(vektoryum_benchmark_contract_tests tests/test_benchmark_result_contract.cpp)
 target_link_libraries(vektoryum_benchmark_contract_tests PRIVATE vektoryum_core)
 vektoryum_apply_warnings(vektoryum_benchmark_contract_tests)
 
-add_executable(vektoryum_hybrid_plan_tests
-    tests/test_hybrid_plan.cpp
-)
+add_executable(vektoryum_hybrid_plan_tests tests/test_hybrid_plan.cpp)
 target_link_libraries(vektoryum_hybrid_plan_tests PRIVATE vektoryum_core)
 vektoryum_apply_warnings(vektoryum_hybrid_plan_tests)
 
-add_executable(vektoryum_alpha_composite_tests
-    tests/test_alpha_composite.cpp
-)
+add_executable(vektoryum_alpha_composite_tests tests/test_alpha_composite.cpp)
 target_link_libraries(vektoryum_alpha_composite_tests PRIVATE vektoryum_core)
 vektoryum_apply_warnings(vektoryum_alpha_composite_tests)
 
-add_executable(vektoryum_hybrid_output_contract_tests
-    tests/test_hybrid_output_contract.cpp
-)
+add_executable(vektoryum_hybrid_output_contract_tests tests/test_hybrid_output_contract.cpp)
 target_link_libraries(vektoryum_hybrid_output_contract_tests PRIVATE vektoryum_core)
 vektoryum_apply_warnings(vektoryum_hybrid_output_contract_tests)
 
-add_executable(vektoryum_hybrid_mixed_content_tests
-    tests/test_hybrid_mixed_content.cpp
-)
+add_executable(vektoryum_hybrid_mixed_content_tests tests/test_hybrid_mixed_content.cpp)
 target_link_libraries(vektoryum_hybrid_mixed_content_tests PRIVATE vektoryum_core)
 vektoryum_apply_warnings(vektoryum_hybrid_mixed_content_tests)
 
+add_executable(vektoryum_export_contract_tests tests/test_export_contract.cpp)
+target_link_libraries(vektoryum_export_contract_tests PRIVATE vektoryum_core)
+vektoryum_apply_warnings(vektoryum_export_contract_tests)
+
+add_executable(vektoryum_export_artifact_contract_tests tests/test_export_artifact_contract.cpp)
+target_link_libraries(vektoryum_export_artifact_contract_tests PRIVATE vektoryum_core)
+vektoryum_apply_warnings(vektoryum_export_artifact_contract_tests)
+
+add_executable(vektoryum_canonical_encoder_tests tests/test_canonical_encoder.cpp)
+target_link_libraries(vektoryum_canonical_encoder_tests PRIVATE vektoryum_core)
+vektoryum_apply_warnings(vektoryum_canonical_encoder_tests)
+
+add_executable(vektoryum_export_destination_contract_tests tests/test_export_destination_contract.cpp)
+target_link_libraries(vektoryum_export_destination_contract_tests PRIVATE vektoryum_core)
+vektoryum_apply_warnings(vektoryum_export_destination_contract_tests)
+
 if(VEKTORYUM_ENABLE_SANITIZERS AND NOT MSVC)
-    target_compile_options(vektoryum_tests PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
-    target_link_options(vektoryum_tests PRIVATE -fsanitize=address,undefined)
-    target_compile_options(vektoryum_training_contract_tests PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
-    target_link_options(vektoryum_training_contract_tests PRIVATE -fsanitize=address,undefined)
-    target_compile_options(vektoryum_benchmark_contract_tests PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
-    target_link_options(vektoryum_benchmark_contract_tests PRIVATE -fsanitize=address,undefined)
-    target_compile_options(vektoryum_hybrid_plan_tests PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
-    target_link_options(vektoryum_hybrid_plan_tests PRIVATE -fsanitize=address,undefined)
-    target_compile_options(vektoryum_alpha_composite_tests PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
-    target_link_options(vektoryum_alpha_composite_tests PRIVATE -fsanitize=address,undefined)
-    target_compile_options(vektoryum_hybrid_output_contract_tests PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
-    target_link_options(vektoryum_hybrid_output_contract_tests PRIVATE -fsanitize=address,undefined)
-    target_compile_options(vektoryum_hybrid_mixed_content_tests PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
-    target_link_options(vektoryum_hybrid_mixed_content_tests PRIVATE -fsanitize=address,undefined)
+    foreach(target
+        vektoryum_tests
+        vektoryum_training_contract_tests
+        vektoryum_benchmark_contract_tests
+        vektoryum_hybrid_plan_tests
+        vektoryum_alpha_composite_tests
+        vektoryum_hybrid_output_contract_tests
+        vektoryum_hybrid_mixed_content_tests
+        vektoryum_export_contract_tests
+        vektoryum_export_artifact_contract_tests
+        vektoryum_canonical_encoder_tests
+        vektoryum_export_destination_contract_tests)
+        target_compile_options(${target} PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+        target_link_options(${target} PRIVATE -fsanitize=address,undefined)
+    endforeach()
 endif()
 
 add_test(NAME vektoryum.unit COMMAND vektoryum_tests)
@@ -151,3 +139,7 @@ add_test(NAME vektoryum.hybrid_plan COMMAND vektoryum_hybrid_plan_tests)
 add_test(NAME vektoryum.alpha_composite COMMAND vektoryum_alpha_composite_tests)
 add_test(NAME vektoryum.hybrid_output_contract COMMAND vektoryum_hybrid_output_contract_tests)
 add_test(NAME vektoryum.hybrid_mixed_content COMMAND vektoryum_hybrid_mixed_content_tests)
+add_test(NAME vektoryum.export_contract COMMAND vektoryum_export_contract_tests)
+add_test(NAME vektoryum.export_artifact_contract COMMAND vektoryum_export_artifact_contract_tests)
+add_test(NAME vektoryum.canonical_encoder COMMAND vektoryum_canonical_encoder_tests)
+add_test(NAME vektoryum.export_destination_contract COMMAND vektoryum_export_destination_contract_tests)
