@@ -17,10 +17,12 @@ Status: active; do not count this stage complete until deterministic exporters, 
 - Adversarial format, size, metadata, path and provenance regressions.
 - Existing source hygiene, Ubuntu, Windows, macOS and Linux ASan/UBSan gates remain mandatory.
 
-## First safe slice
+## Implemented slices
 
-The export request contract introduces an explicit SVG/PDF/EPS/DXF format enum, stable schema/export identity, exact source hybrid-output identity plus canonical lowercase SHA-256 binding, bounded pixel/output-byte budgets, fail-closed unknown formats and malformed provenance, and a deterministic canonical request report. Adversarial standalone CTest regressions cover unknown enum values, noncanonical digests, zero dimensions, pixel overflow/budget excess and output-byte budget violations. The target is included in normal cross-platform tests and Linux sanitizer builds.
+The export request contract introduces an explicit SVG/PDF/EPS/DXF format enum, stable schema/export identity, exact source hybrid-output identity plus canonical lowercase SHA-256 binding, bounded pixel/output-byte budgets, fail-closed unknown formats and malformed provenance, and a deterministic canonical request report. Adversarial standalone CTest regressions cover unknown enum values, noncanonical digests, zero dimensions, pixel overflow/budget excess, output-byte budget violations, stale hybrid-output identity/digest substitution and newline/carriage-return serialization collisions.
+
+The encoded export artifact contract adds exact request/source identity binding for produced bytes, canonical SHA-256 output provenance using the repository SHA-256 implementation, output-size enforcement against the validated request budget, bounded peak intermediate memory and execution units, and fail-closed format-specific structural envelopes for SVG, PDF, EPS and DXF. Adversarial CTest regressions cover format/identity/source substitution, malformed or mismatched output digests, empty/oversized outputs, zero/excess execution resources and malformed format structure. The target is included in normal cross-platform tests and Linux sanitizer builds.
 
 ## Remaining acceptance
 
-Implement canonical format encoders, exact deterministic output-byte provenance, bounded encoder memory/execution accounting, format-specific structural validation, safe metadata/path contracts and adversarial end-to-end exporter fixtures before Stage 10 can be completed.
+Implement canonical SVG/PDF/EPS/DXF byte encoders that generate the validated structures, prove identical validated input/configuration yields identical output bytes, add safe metadata/path contracts, and add adversarial end-to-end exporter fixtures before Stage 10 can be completed.
