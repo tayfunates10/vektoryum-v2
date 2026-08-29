@@ -94,6 +94,11 @@ ReconstructionResult reconstruct_binary_mask(
         result.error = ReconstructionError::ZeroDimension;
         return result;
     }
+    if (width > static_cast<std::uint32_t>(std::numeric_limits<std::int32_t>::max() - 1) ||
+        height > static_cast<std::uint32_t>(std::numeric_limits<std::int32_t>::max() - 1)) {
+        result.error = ReconstructionError::CoordinateOverflow;
+        return result;
+    }
     const std::uint64_t pixels = static_cast<std::uint64_t>(width) * height;
     if (pixels > static_cast<std::uint64_t>(std::numeric_limits<std::size_t>::max())) {
         result.error = ReconstructionError::SizeOverflow;
@@ -138,6 +143,10 @@ ReconstructionResult reconstruct_binary_mask(
         }
     }
 
+    if (edges.empty()) {
+        result.error = ReconstructionError::NoForeground;
+        return result;
+    }
     if (edges.size() > options.max_nodes) {
         result.error = ReconstructionError::NodeBudgetExceeded;
         return result;
@@ -152,6 +161,10 @@ ReconstructionResult reconstruct_binary_mask(
         std::sort(indices.begin(), indices.end(), [&](std::size_t lhs, std::size_t rhs) {
             return less_point(edges[lhs].b, edges[rhs].b);
         });
+        if (indices.size() != 1U) {
+            result.error = ReconstructionError::TopologyAmbiguity;
+            return result;
+        }
     }
 
     for (std::size_t seed = 0U; seed < edges.size(); ++seed) {
@@ -173,19 +186,12 @@ ReconstructionResult reconstruct_binary_mask(
                 break;
             }
             const auto it = outgoing.find({next.x, next.y});
-            if (it == outgoing.end()) {
+            if (it == outgoing.end() || it->second.size() != 1U) {
                 result.error = ReconstructionError::BrokenContour;
                 return result;
             }
-            bool found = false;
-            for (const std::size_t candidate : it->second) {
-                if (!edges[candidate].used) {
-                    current = candidate;
-                    found = true;
-                    break;
-                }
-            }
-            if (!found) {
+            current = it->second.front();
+            if (edges[current].used) {
                 result.error = ReconstructionError::BrokenContour;
                 return result;
             }
