@@ -5,6 +5,10 @@
 #include <string>
 #include <string_view>
 
+namespace vektoryum::certification {
+struct QualityCertificateArtifact;
+}
+
 namespace vektoryum::api {
 
 inline constexpr std::string_view stable_schema_version = "vektoryum.core-api.v1";
@@ -21,6 +25,7 @@ enum class ExitCode : int {
 enum class Operation : std::uint8_t {
     Unspecified = 0,
     Version = 1,
+    CertifiedExport = 2,
 };
 
 struct RequestLimits {
@@ -39,6 +44,11 @@ struct RequestEnvelope {
     std::uint64_t work_units{0U};
 };
 
+struct CertifiedOperationRequest {
+    RequestEnvelope request;
+    std::string certificate_sha256;
+};
+
 enum class RequestError : std::uint8_t {
     None = 0,
     UnsupportedSchema,
@@ -49,6 +59,9 @@ enum class RequestError : std::uint8_t {
     InputTooLarge,
     OutputTooLarge,
     WorkLimitExceeded,
+    MissingCertificateEvidence,
+    InvalidCertificateArtifact,
+    CertificateProvenanceMismatch,
 };
 
 struct RequestValidation {
@@ -74,8 +87,13 @@ struct ResponseEnvelope {
 [[nodiscard]] RequestValidation validate_request_envelope(
     const RequestEnvelope& request,
     const RequestLimits& limits = {}) noexcept;
+[[nodiscard]] RequestValidation validate_certified_operation_request(
+    const CertifiedOperationRequest& request,
+    const certification::QualityCertificateArtifact& certificate,
+    const RequestLimits& limits = {});
 
 [[nodiscard]] std::string canonical_request_report(const RequestEnvelope& request);
+[[nodiscard]] std::string canonical_certified_request_report(const CertifiedOperationRequest& request);
 [[nodiscard]] std::string canonical_response_report(const ResponseEnvelope& response);
 [[nodiscard]] std::string_view operation_name(Operation operation) noexcept;
 [[nodiscard]] std::string_view request_error_name(RequestError error) noexcept;
