@@ -1,10 +1,10 @@
 # Vektoryum v2
 
-Core Engine progress: **18%**
+Core Engine progress: **26%**
 
-Completed: Stages 0, 1, 2.
+Completed: Stages 0, 1, 2, 3.
 
-Active: **Stage 3 — high-quality raster resampler**.
+Active: **Stage 4 — Content Analyzer & deterministic router**.
 
 Workflow: branch → pull request → CI → merge only after all required checks pass.
 
@@ -15,8 +15,8 @@ Workflow: branch → pull request → CI → merge only after all required check
 | 0 | Specification and roadmap | 4% | done |
 | 1 | Repository foundation and CI | 6% | done |
 | 2 | Image Core | 8% | done |
-| 3 | Raster resampler | 8% | active |
-| 4 | Content analyzer/router | 5% | planned |
+| 3 | Raster resampler | 8% | done |
+| 4 | Content analyzer/router | 5% | active |
 | 5 | Vector reconstruction | 12% | planned |
 | 6 | Photo restoration and non-ML SR | 12% | planned |
 | 7 | Vektoryum ML/DL model/runtime | 14% | planned |
@@ -32,5 +32,6 @@ Workflow: branch → pull request → CI → merge only after all required check
 - 4%: project specification and roadmap established.
 - 10%: Stage 1 merged in PR #2 after required CI passed.
 - 18%: Stage 2 merged in PR #3 after required CI passed.
+- 26%: Stage 3 merged in PR #4 after source hygiene, cross-platform build/tests, sanitizers, deterministic 2x/4x/8x scaling, edge overshoot and checkerboard antialias gates passed.
 
-Next: implement Stage 3 with deterministic 2x/4x/8x raster scaling and quality tests.
+Next: implement Stage 4 with deterministic photo/logo/line-art/mixed classification, confidence scoring and conservative fallback routing.
