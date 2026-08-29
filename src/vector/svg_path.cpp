@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstddef>
 #include <iomanip>
 #include <locale>
 #include <sstream>
@@ -21,6 +22,27 @@ constexpr double kKappa = 0.5522847498307936;
 
 [[nodiscard]] DoublePoint interpolate(const DoublePoint& a, const DoublePoint& b, double t) noexcept {
     return {a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t};
+}
+
+[[nodiscard]] DoublePoint cubic_point(
+    const DoublePoint& p0,
+    const DoublePoint& p1,
+    const DoublePoint& p2,
+    const DoublePoint& p3,
+    double t) noexcept {
+    const double u = 1.0 - t;
+    const double uu = u * u;
+    const double tt = t * t;
+    const double uuu = uu * u;
+    const double ttt = tt * t;
+    return {
+        (uuu * p0.x) + (3.0 * uu * t * p1.x) + (3.0 * u * tt * p2.x) + (ttt * p3.x),
+        (uuu * p0.y) + (3.0 * uu * t * p1.y) + (3.0 * u * tt * p2.y) + (ttt * p3.y),
+    };
+}
+
+[[nodiscard]] bool finite_point(const DoublePoint& point) noexcept {
+    return std::isfinite(point.x) && std::isfinite(point.y);
 }
 
 [[nodiscard]] bool valid_source_path(const Path& path) noexcept {
@@ -62,6 +84,69 @@ constexpr double kKappa = 0.5522847498307936;
     SvgCommand command{};
     command.type = SvgCommandType::Close;
     return command;
+}
+
+[[nodiscard]] bool flatten_svg_path(
+    const SvgPath& path,
+    std::uint32_t subdivisions,
+    std::vector<DoublePoint>& flattened) {
+    if (subdivisions == 0U || path.commands.size() < 3U ||
+        path.commands.front().type != SvgCommandType::MoveTo ||
+        path.commands.back().type != SvgCommandType::Close) {
+        return false;
+    }
+
+    flattened.clear();
+    DoublePoint current = path.commands.front().end;
+    if (!finite_point(current)) {
+        return false;
+    }
+    flattened.push_back(current);
+
+    for (std::size_t i = 1U; i + 1U < path.commands.size(); ++i) {
+        const SvgCommand& command = path.commands[i];
+        if (!finite_point(command.end)) {
+            return false;
+        }
+        if (command.type == SvgCommandType::LineTo) {
+            flattened.push_back(command.end);
+            current = command.end;
+            continue;
+        }
+        if (command.type == SvgCommandType::CubicTo) {
+            if (!finite_point(command.control1) || !finite_point(command.control2)) {
+                return false;
+            }
+            for (std::uint32_t step = 1U; step <= subdivisions; ++step) {
+                const double t = static_cast<double>(step) / static_cast<double>(subdivisions);
+                flattened.push_back(cubic_point(current, command.control1, command.control2, command.end, t));
+            }
+            current = command.end;
+            continue;
+        }
+        return false;
+    }
+    return flattened.size() >= 3U;
+}
+
+[[nodiscard]] bool point_in_polygon(
+    const std::vector<DoublePoint>& polygon,
+    double x,
+    double y) noexcept {
+    bool inside = false;
+    for (std::size_t i = 0U, j = polygon.size() - 1U; i < polygon.size(); j = i++) {
+        const DoublePoint& a = polygon[i];
+        const DoublePoint& b = polygon[j];
+        const bool crosses = ((a.y > y) != (b.y > y));
+        if (!crosses) {
+            continue;
+        }
+        const double intersection_x = ((b.x - a.x) * (y - a.y) / (b.y - a.y)) + a.x;
+        if (x < intersection_x) {
+            inside = !inside;
+        }
+    }
+    return inside;
 }
 
 }  // namespace
@@ -147,6 +232,83 @@ SvgFitResult fit_svg_paths(const VectorScene& scene, SvgFitOptions options) {
     }
 
     return result;
+}
+
+SvgCertificationReport certify_svg_scene(
+    const SvgScene& scene,
+    std::span<const std::uint8_t> reference_mask,
+    std::uint32_t width,
+    std::uint32_t height,
+    SvgCertificationOptions options) {
+    SvgCertificationReport report{};
+    if (scene.width != width || scene.height != height || width == 0U || height == 0U ||
+        scene.paths.empty() || options.cubic_subdivisions == 0U ||
+        !std::isfinite(options.min_iou) || !std::isfinite(options.max_disagreement_ratio) ||
+        options.min_iou < 0.0 || options.min_iou > 1.0 ||
+        options.max_disagreement_ratio < 0.0 || options.max_disagreement_ratio > 1.0) {
+        report.error = SvgCertificationError::InvalidScene;
+        return report;
+    }
+
+    const std::uint64_t pixel_count = static_cast<std::uint64_t>(width) * height;
+    if (pixel_count > options.max_certification_pixels) {
+        report.error = SvgCertificationError::CertificationBudgetExceeded;
+        return report;
+    }
+    if (reference_mask.size() != static_cast<std::size_t>(pixel_count)) {
+        report.error = SvgCertificationError::InvalidReference;
+        return report;
+    }
+    for (std::uint8_t value : reference_mask) {
+        if (value > 1U) {
+            report.error = SvgCertificationError::InvalidReference;
+            return report;
+        }
+    }
+
+    std::vector<std::vector<DoublePoint>> polygons;
+    polygons.reserve(scene.paths.size());
+    for (const SvgPath& path : scene.paths) {
+        std::vector<DoublePoint> polygon;
+        if (!flatten_svg_path(path, options.cubic_subdivisions, polygon)) {
+            report.error = SvgCertificationError::InvalidScene;
+            return report;
+        }
+        polygons.push_back(std::move(polygon));
+    }
+
+    std::uint64_t intersection_count = 0U;
+    std::uint64_t union_count = 0U;
+    std::uint64_t disagreement_count = 0U;
+    for (std::uint32_t y = 0U; y < height; ++y) {
+        for (std::uint32_t x = 0U; x < width; ++x) {
+            const double px = static_cast<double>(x) + 0.5;
+            const double py = static_cast<double>(y) + 0.5;
+            bool rendered = false;
+            for (const auto& polygon : polygons) {
+                if (point_in_polygon(polygon, px, py)) {
+                    rendered = !rendered;
+                }
+            }
+            const bool reference = reference_mask[static_cast<std::size_t>(y) * width + x] != 0U;
+            intersection_count += rendered && reference ? 1U : 0U;
+            union_count += rendered || reference ? 1U : 0U;
+            disagreement_count += rendered != reference ? 1U : 0U;
+        }
+    }
+
+    report.compared_pixels = pixel_count;
+    report.raster_iou = union_count == 0U
+        ? 1.0
+        : static_cast<double>(intersection_count) / static_cast<double>(union_count);
+    report.disagreement_ratio = pixel_count == 0U
+        ? 0.0
+        : static_cast<double>(disagreement_count) / static_cast<double>(pixel_count);
+    if (report.raster_iou < options.min_iou ||
+        report.disagreement_ratio > options.max_disagreement_ratio) {
+        report.error = SvgCertificationError::FidelityRejected;
+    }
+    return report;
 }
 
 std::string serialize_svg_path_data(const SvgPath& path) {
