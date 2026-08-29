@@ -119,6 +119,10 @@ add_executable(vektoryum_quality_certificate_tests tests/test_quality_certificat
 target_link_libraries(vektoryum_quality_certificate_tests PRIVATE vektoryum_core)
 vektoryum_apply_warnings(vektoryum_quality_certificate_tests)
 
+add_executable(vektoryum_quality_certificate_e2e_tests tests/test_quality_certificate_e2e.cpp)
+target_link_libraries(vektoryum_quality_certificate_e2e_tests PRIVATE vektoryum_core)
+vektoryum_apply_warnings(vektoryum_quality_certificate_e2e_tests)
+
 if(VEKTORYUM_ENABLE_SANITIZERS AND NOT MSVC)
     foreach(target
         vektoryum_tests
@@ -132,7 +136,8 @@ if(VEKTORYUM_ENABLE_SANITIZERS AND NOT MSVC)
         vektoryum_export_artifact_contract_tests
         vektoryum_canonical_encoder_tests
         vektoryum_export_destination_contract_tests
-        vektoryum_quality_certificate_tests)
+        vektoryum_quality_certificate_tests
+        vektoryum_quality_certificate_e2e_tests)
         target_compile_options(${target} PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
         target_link_options(${target} PRIVATE -fsanitize=address,undefined)
     endforeach()
@@ -150,3 +155,4 @@ add_test(NAME vektoryum.export_artifact_contract COMMAND vektoryum_export_artifa
 add_test(NAME vektoryum.canonical_encoder COMMAND vektoryum_canonical_encoder_tests)
 add_test(NAME vektoryum.export_destination_contract COMMAND vektoryum_export_destination_contract_tests)
 add_test(NAME vektoryum.quality_certificate COMMAND vektoryum_quality_certificate_tests)
+add_test(NAME vektoryum.quality_certificate_e2e COMMAND vektoryum_quality_certificate_e2e_tests)
