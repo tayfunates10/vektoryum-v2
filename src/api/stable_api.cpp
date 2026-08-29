@@ -1,5 +1,6 @@
 #include "vektoryum/api/stable_api.hpp"
 
+#include <locale>
 #include <sstream>
 
 namespace vektoryum::api {
