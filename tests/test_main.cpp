@@ -12,6 +12,8 @@
 #include "vektoryum/io/limits.hpp"
 #include "vektoryum/version.hpp"
 
+int run_resampler_tests();
+
 namespace {
 
 int failures = 0;
@@ -219,6 +221,7 @@ int main() {
     test_color_and_alpha();
     test_tiles();
     test_decode_limits();
+    failures += run_resampler_tests();
 
     if (failures != 0) {
         std::cerr << failures << " test(s) failed\n";
