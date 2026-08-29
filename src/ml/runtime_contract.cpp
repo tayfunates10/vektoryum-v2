@@ -1,6 +1,7 @@
 #include "vektoryum/ml/runtime_contract.hpp"
 
 #include <cctype>
+#include <cstddef>
 #include <limits>
 
 namespace vektoryum::ml {
@@ -47,8 +48,9 @@ ContractValidation validate_runtime_contract(
         result.error = RuntimeError::InvalidModelVersion;
         return result;
     }
+    const auto max_rank = static_cast<std::size_t>(limits.max_tensor_rank);
     if (limits.max_tensor_rank == 0U || limits.max_tensor_elements == 0U ||
-        input.dimensions.empty() || input.dimensions.size() > limits.max_tensor_rank) {
+        input.dimensions.empty() || input.dimensions.size() > max_rank) {
         result.error = RuntimeError::InvalidTensorRank;
         return result;
     }
