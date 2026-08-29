@@ -112,13 +112,21 @@ ReconstructionResult reconstruct_binary_mask(
     result.scene.width = width;
     result.scene.height = height;
     std::vector<Edge> edges;
-    edges.reserve(static_cast<std::size_t>(pixels));
+    const std::size_t reserve_count = std::min(static_cast<std::size_t>(pixels), options.max_nodes);
+    edges.reserve(reserve_count);
     const auto fg = [&](std::int64_t x, std::int64_t y) noexcept {
         if (x < 0 || y < 0 || x >= static_cast<std::int64_t>(width) || y >= static_cast<std::int64_t>(height)) {
             return false;
         }
         const auto idx = static_cast<std::size_t>(y) * width + static_cast<std::size_t>(x);
         return coverage[idx] >= options.threshold;
+    };
+    const auto add_edge = [&](IntPoint a, IntPoint b) noexcept {
+        if (edges.size() >= options.max_nodes) {
+            return false;
+        }
+        edges.push_back({a, b, false});
+        return true;
     };
 
     for (std::uint32_t y = 0U; y < height; ++y) {
@@ -128,27 +136,31 @@ ReconstructionResult reconstruct_binary_mask(
             }
             const auto ix = static_cast<std::int32_t>(x);
             const auto iy = static_cast<std::int32_t>(y);
-            if (!fg(static_cast<std::int64_t>(x), static_cast<std::int64_t>(y) - 1)) {
-                edges.push_back({{ix, iy}, {ix + 1, iy}, false});
+            if (!fg(static_cast<std::int64_t>(x), static_cast<std::int64_t>(y) - 1) &&
+                !add_edge({ix, iy}, {ix + 1, iy})) {
+                result.error = ReconstructionError::NodeBudgetExceeded;
+                return result;
             }
-            if (!fg(static_cast<std::int64_t>(x) + 1, y)) {
-                edges.push_back({{ix + 1, iy}, {ix + 1, iy + 1}, false});
+            if (!fg(static_cast<std::int64_t>(x) + 1, y) &&
+                !add_edge({ix + 1, iy}, {ix + 1, iy + 1})) {
+                result.error = ReconstructionError::NodeBudgetExceeded;
+                return result;
             }
-            if (!fg(x, static_cast<std::int64_t>(y) + 1)) {
-                edges.push_back({{ix + 1, iy + 1}, {ix, iy + 1}, false});
+            if (!fg(x, static_cast<std::int64_t>(y) + 1) &&
+                !add_edge({ix + 1, iy + 1}, {ix, iy + 1})) {
+                result.error = ReconstructionError::NodeBudgetExceeded;
+                return result;
             }
-            if (!fg(static_cast<std::int64_t>(x) - 1, y)) {
-                edges.push_back({{ix, iy + 1}, {ix, iy}, false});
+            if (!fg(static_cast<std::int64_t>(x) - 1, y) &&
+                !add_edge({ix, iy + 1}, {ix, iy})) {
+                result.error = ReconstructionError::NodeBudgetExceeded;
+                return result;
             }
         }
     }
 
     if (edges.empty()) {
         result.error = ReconstructionError::NoForeground;
-        return result;
-    }
-    if (edges.size() > options.max_nodes) {
-        result.error = ReconstructionError::NodeBudgetExceeded;
         return result;
     }
 
