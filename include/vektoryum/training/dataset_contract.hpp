@@ -27,7 +27,13 @@ struct DatasetSample {
     DatasetSplit split{DatasetSplit::Train};
 };
 
+struct DatasetSampleArtifact {
+    std::string sample_id;
+    std::vector<std::uint8_t> bytes;
+};
+
 struct DatasetManifest {
+    std::string schema_version;
     std::string dataset_id;
     std::string version;
     std::uint64_t split_seed{0U};
@@ -43,10 +49,12 @@ struct DatasetLimits {
 
 enum class DatasetContractError : std::uint8_t {
     None,
+    MissingSchemaVersion,
     MissingDatasetIdentity,
     EmptyDataset,
     TooManySamples,
     MissingSampleIdentity,
+    NonDeterministicSampleOrder,
     InvalidContentDigest,
     MissingRightsProvenance,
     LicenseNotAllowed,
@@ -59,6 +67,10 @@ enum class DatasetContractError : std::uint8_t {
     DuplicateSampleId,
     DuplicateContentDigest,
     SplitAssignmentMismatch,
+    ArtifactCountMismatch,
+    ArtifactIdentityMismatch,
+    ArtifactByteSizeMismatch,
+    ContentDigestMismatch,
 };
 
 struct DatasetContractResult {
@@ -74,6 +86,8 @@ struct DatasetContractResult {
                                                std::uint64_t split_seed) noexcept;
 [[nodiscard]] std::string dataset_rights_binding_sha256(const DatasetSample& sample);
 [[nodiscard]] DatasetContractResult validate_dataset_manifest(
-    const DatasetManifest& manifest, const DatasetLimits& limits = {});
+    const DatasetManifest& manifest,
+    const std::vector<DatasetSampleArtifact>& artifacts,
+    const DatasetLimits& limits = {});
 
 }  // namespace vektoryum::training
