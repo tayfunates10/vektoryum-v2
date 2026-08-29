@@ -195,4 +195,52 @@ CanonicalMetricMeasurement measure_canonical_export_metrics(
     return measurement;
 }
 
+CanonicalQualityMeasurement measure_canonical_quality_metrics(
+    const CanonicalQualityFixture& fixture,
+    std::uint64_t max_samples) {
+    const std::size_t sample_count = fixture.reference_alpha.size();
+    if (sample_count == 0U || fixture.candidate_alpha.size() != sample_count ||
+        fixture.reference_vector_mask.size() != sample_count || fixture.candidate_vector_mask.size() != sample_count) {
+        return {QualityCertificateError::InvalidQualityFixture, 0U, {}};
+    }
+    if (sample_count > max_samples) {
+        return {QualityCertificateError::SampleBudgetExceeded, 0U, {}};
+    }
+
+    std::uint64_t alpha_absolute_error = 0U;
+    std::uint64_t vector_intersection = 0U;
+    std::uint64_t vector_union = 0U;
+    for (std::size_t index = 0U; index < sample_count; ++index) {
+        const std::uint8_t reference_mask = fixture.reference_vector_mask[index];
+        const std::uint8_t candidate_mask = fixture.candidate_vector_mask[index];
+        if (reference_mask > 1U || candidate_mask > 1U) {
+            return {QualityCertificateError::InvalidQualityFixture, 0U, {}};
+        }
+        const int alpha_delta = static_cast<int>(fixture.reference_alpha[index]) -
+                                static_cast<int>(fixture.candidate_alpha[index]);
+        alpha_absolute_error += static_cast<std::uint64_t>(alpha_delta < 0 ? -alpha_delta : alpha_delta);
+        vector_intersection += (reference_mask == 1U && candidate_mask == 1U) ? 1U : 0U;
+        vector_union += (reference_mask == 1U || candidate_mask == 1U) ? 1U : 0U;
+    }
+
+    const double alpha_mae = static_cast<double>(alpha_absolute_error) /
+                             (255.0 * static_cast<double>(sample_count));
+    const double vector_iou = vector_union == 0U ? 1.0 :
+        static_cast<double>(vector_intersection) / static_cast<double>(vector_union);
+
+    CanonicalQualityMeasurement measurement;
+    measurement.sample_count = static_cast<std::uint64_t>(sample_count);
+    measurement.metrics = {
+        MetricGate{"alpha_mae", alpha_mae, 0.0, 0.02},
+        MetricGate{"vector_iou", vector_iou, 0.99, 1.0},
+    };
+    for (const auto& metric : measurement.metrics) {
+        if (metric.measured < metric.minimum || metric.measured > metric.maximum) {
+            measurement.error = QualityCertificateError::ThresholdViolation;
+            return measurement;
+        }
+    }
+    return measurement;
+}
+
 }  // namespace vektoryum::certification
