@@ -27,9 +27,11 @@ void expect_true(bool condition, std::string_view name) {
     value.content_sha256 = std::move(digest);
     value.license_id = "CC0-1.0";
     value.rights_statement = "production training permitted";
+    value.rights_grant_source = "fixture-rights-owner";
     value.production_training_authorized = true;
     value.byte_size = 1024U;
     value.split = deterministic_split(value.content_sha256, seed);
+    value.rights_binding_sha256 = dataset_rights_binding_sha256(value);
     return value;
 }
 
@@ -74,15 +76,41 @@ int run_dataset_contract_tests() {
                 "missing rights statement is rejected");
 
     invalid = baseline;
+    invalid.samples[0].rights_grant_source.clear();
+    expect_true(validate_dataset_manifest(invalid).error == DatasetContractError::MissingRightsProvenance,
+                "missing rights grant source is rejected");
+
+    invalid = baseline;
+    invalid.samples[0].license_id = "UNKNOWN-LICENSE";
+    expect_true(validate_dataset_manifest(invalid).error == DatasetContractError::LicenseNotAllowed,
+                "unknown or incompatible license is rejected fail-closed");
+
+    invalid = baseline;
     invalid.samples[0].production_training_authorized = false;
     expect_true(validate_dataset_manifest(invalid).error ==
                     DatasetContractError::ProductionTrainingUnauthorized,
                 "unauthorized production training data is rejected");
 
     invalid = baseline;
+    invalid.samples[0].rights_binding_sha256 = "not-a-sha256";
+    expect_true(validate_dataset_manifest(invalid).error == DatasetContractError::InvalidRightsBinding,
+                "malformed digest-to-rights binding is rejected");
+
+    invalid = baseline;
+    invalid.samples[0].rights_statement = "modified rights metadata";
+    expect_true(validate_dataset_manifest(invalid).error == DatasetContractError::RightsBindingMismatch,
+                "changed rights metadata is rejected by digest binding");
+
+    invalid = baseline;
+    invalid.samples[0].rights_grant_source = "different-rights-owner";
+    expect_true(validate_dataset_manifest(invalid).error == DatasetContractError::RightsBindingMismatch,
+                "changed rights grant source is rejected by digest binding");
+
+    invalid = baseline;
     invalid.samples[1].content_sha256 = invalid.samples[0].content_sha256;
     invalid.samples[1].split = deterministic_split(invalid.samples[1].content_sha256,
                                                    invalid.split_seed);
+    invalid.samples[1].rights_binding_sha256 = dataset_rights_binding_sha256(invalid.samples[1]);
     expect_true(validate_dataset_manifest(invalid).error == DatasetContractError::DuplicateContentDigest,
                 "duplicate content cannot leak across dataset splits");
 
