@@ -1,7 +1,6 @@
 #include "vektoryum/training/dataset_contract.hpp"
 
 #include <algorithm>
-#include <limits>
 #include <unordered_set>
 #include <vector>
 
@@ -86,8 +85,13 @@ std::string dataset_rights_binding_sha256(const DatasetSample& sample) {
     return ml::sha256_hex(bytes);
 }
 
-DatasetContractResult validate_dataset_manifest(const DatasetManifest& manifest,
-                                                const DatasetLimits& limits) {
+DatasetContractResult validate_dataset_manifest(
+    const DatasetManifest& manifest,
+    const std::vector<DatasetSampleArtifact>& artifacts,
+    const DatasetLimits& limits) {
+    if (manifest.schema_version.empty()) {
+        return fail(DatasetContractError::MissingSchemaVersion, 0U, 0U);
+    }
     if (manifest.dataset_id.empty() || manifest.version.empty()) {
         return fail(DatasetContractError::MissingDatasetIdentity, 0U, 0U);
     }
@@ -97,18 +101,27 @@ DatasetContractResult validate_dataset_manifest(const DatasetManifest& manifest,
     if (manifest.samples.size() > limits.max_samples) {
         return fail(DatasetContractError::TooManySamples, 0U, 0U);
     }
+    if (artifacts.size() != manifest.samples.size()) {
+        return fail(DatasetContractError::ArtifactCountMismatch, 0U, 0U);
+    }
 
     std::unordered_set<std::string> sample_ids;
     std::unordered_set<std::string> content_digests;
     sample_ids.reserve(manifest.samples.size());
     content_digests.reserve(manifest.samples.size());
 
+    std::string_view previous_sample_id;
     std::uint64_t total_bytes = 0U;
     for (std::size_t index = 0U; index < manifest.samples.size(); ++index) {
         const DatasetSample& sample = manifest.samples[index];
+        const DatasetSampleArtifact& artifact = artifacts[index];
         if (sample.sample_id.empty() || sample.source_id.empty()) {
             return fail(DatasetContractError::MissingSampleIdentity, index, total_bytes);
         }
+        if (!previous_sample_id.empty() && sample.sample_id < previous_sample_id) {
+            return fail(DatasetContractError::NonDeterministicSampleOrder, index, total_bytes);
+        }
+        previous_sample_id = sample.sample_id;
         if (!is_sha256_hex(sample.content_sha256)) {
             return fail(DatasetContractError::InvalidContentDigest, index, total_bytes);
         }
@@ -136,6 +149,15 @@ DatasetContractResult validate_dataset_manifest(const DatasetManifest& manifest,
         }
         if (total_bytes > limits.max_total_bytes || sample.byte_size > limits.max_total_bytes - total_bytes) {
             return fail(DatasetContractError::TotalByteBudgetExceeded, index, total_bytes);
+        }
+        if (artifact.sample_id != sample.sample_id) {
+            return fail(DatasetContractError::ArtifactIdentityMismatch, index, total_bytes);
+        }
+        if (artifact.bytes.size() != sample.byte_size) {
+            return fail(DatasetContractError::ArtifactByteSizeMismatch, index, total_bytes);
+        }
+        if (ml::sha256_hex(artifact.bytes) != sample.content_sha256) {
+            return fail(DatasetContractError::ContentDigestMismatch, index, total_bytes);
         }
         total_bytes += sample.byte_size;
 
