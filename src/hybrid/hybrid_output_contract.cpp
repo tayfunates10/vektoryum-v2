@@ -96,7 +96,9 @@ std::string canonical_hybrid_output_report(const HybridPlan& plan,
     report << "contribution_count=" << output.contributions.size() << '\n';
     for (std::size_t index = 0U; index < output.contributions.size(); ++index) {
         const HybridOutputContribution& contribution = output.contributions[index];
+        const HybridContribution& planned = plan.contributions[index];
         report << "contribution[" << index << "].id=" << contribution.contribution_id << '\n';
+        report << "contribution[" << index << "].source_id=" << planned.source_id << '\n';
         report << "contribution[" << index << "].revision=" << contribution.source_revision << '\n';
         report << "contribution[" << index << "].sha256=" << contribution.source_sha256 << '\n';
     }
