@@ -27,7 +27,23 @@ namespace {
 
 QualityCertificateValidation validate_quality_certificate_request(
     const QualityCertificateRequest& request,
-    const QualityCertificateLimits& limits) {
+    const exporting::ExportRequest& export_request,
+    const hybrid::HybridOutputManifest& source_output,
+    const exporting::EncodedExportArtifact& export_artifact,
+    const QualityCertificateLimits& limits,
+    const exporting::ExportLimits& export_limits,
+    const exporting::ExportExecutionLimits& export_execution_limits) {
+    if (!exporting::validate_encoded_export_artifact(
+             export_request, source_output, export_artifact, export_limits, export_execution_limits)
+             .ok()) {
+        return {QualityCertificateError::InvalidExportArtifact, 0U};
+    }
+    if (request.input_sha256 != export_artifact.source_output_sha256) {
+        return {QualityCertificateError::InputProvenanceMismatch, 0U};
+    }
+    if (request.output_sha256 != export_artifact.output_sha256) {
+        return {QualityCertificateError::OutputProvenanceMismatch, 0U};
+    }
     if (request.schema_version.empty() || request.certificate_id.empty() ||
         contains_report_delimiter(request.schema_version) || contains_report_delimiter(request.certificate_id)) {
         return {QualityCertificateError::MissingIdentity, 0U};
