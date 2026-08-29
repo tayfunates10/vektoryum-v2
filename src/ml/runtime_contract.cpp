@@ -1,6 +1,7 @@
 #include "vektoryum/ml/runtime_contract.hpp"
 
 #include <cctype>
+#include <cmath>
 #include <cstddef>
 #include <limits>
 
@@ -107,6 +108,25 @@ namespace {
     return result;
 }
 
+[[nodiscard]] std::uint32_t shape_channels(
+    const TensorShape& shape,
+    TensorLayout layout) noexcept {
+    if (shape.dimensions.size() != 4U) {
+        return 0U;
+    }
+    if (layout == TensorLayout::Nchw) {
+        return shape.dimensions[1U];
+    }
+    if (layout == TensorLayout::Nhwc) {
+        return shape.dimensions[3U];
+    }
+    return 0U;
+}
+
+[[nodiscard]] bool supported_channel_count(std::uint32_t channels) noexcept {
+    return channels == 1U || channels == 3U || channels == 4U;
+}
+
 }  // namespace
 
 ContractValidation validate_runtime_contract(
@@ -123,6 +143,56 @@ ContractValidation validate_runtime_contract(
         return result;
     }
     return validate_tensor_shape(input, limits, RuntimeError::InvalidTensorRank);
+}
+
+ContractValidation validate_preprocess_contract(
+    const PreprocessContract& preprocess,
+    const TensorShape& input) noexcept {
+    ContractValidation result{};
+    if (preprocess.layout == TensorLayout::Unknown || input.dimensions.size() != 4U) {
+        result.error = RuntimeError::InvalidTensorLayout;
+        return result;
+    }
+    const auto channels = shape_channels(input, preprocess.layout);
+    if (!supported_channel_count(preprocess.channels) || channels != preprocess.channels) {
+        result.error = RuntimeError::InvalidChannelContract;
+        return result;
+    }
+    const auto expected = static_cast<std::size_t>(preprocess.channels);
+    if (preprocess.mean.size() != expected || preprocess.scale.size() != expected) {
+        result.error = RuntimeError::InvalidNormalization;
+        return result;
+    }
+    for (std::size_t index = 0U; index < expected; ++index) {
+        if (!std::isfinite(preprocess.mean[index]) ||
+            !std::isfinite(preprocess.scale[index]) ||
+            preprocess.scale[index] == 0.0F) {
+            result.error = RuntimeError::InvalidNormalization;
+            return result;
+        }
+    }
+    return result;
+}
+
+ContractValidation validate_postprocess_contract(
+    const PostprocessContract& postprocess,
+    const TensorShape& output) noexcept {
+    ContractValidation result{};
+    if (postprocess.layout == TensorLayout::Unknown || output.dimensions.size() != 4U) {
+        result.error = RuntimeError::InvalidTensorLayout;
+        return result;
+    }
+    const auto channels = shape_channels(output, postprocess.layout);
+    if (!supported_channel_count(postprocess.channels) || channels != postprocess.channels) {
+        result.error = RuntimeError::InvalidChannelContract;
+        return result;
+    }
+    if (!std::isfinite(postprocess.output_min) || !std::isfinite(postprocess.output_max) ||
+        postprocess.output_min > postprocess.output_max) {
+        result.error = RuntimeError::InvalidPostprocessRange;
+        return result;
+    }
+    return result;
 }
 
 ContractValidation validate_execution_contract(
@@ -145,6 +215,17 @@ ContractValidation validate_execution_contract(
         return result;
     }
     result.output_tensor_elements = output.tensor_elements;
+
+    const auto preprocess = validate_preprocess_contract(contract.preprocess, contract.input);
+    if (!preprocess.ok()) {
+        result.error = preprocess.error;
+        return result;
+    }
+    const auto postprocess = validate_postprocess_contract(contract.postprocess, contract.output);
+    if (!postprocess.ok()) {
+        result.error = postprocess.error;
+        return result;
+    }
     return result;
 }
 
