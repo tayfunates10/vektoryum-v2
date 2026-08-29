@@ -16,6 +16,7 @@ add_library(vektoryum_core STATIC
     src/core/tile.cpp
     src/io/limits.cpp
     src/resample/resampler.cpp
+    src/vector/reconstruction.cpp
     src/version.cpp
 )
 
@@ -70,6 +71,7 @@ add_executable(vektoryum_tests
     tests/test_main.cpp
     tests/test_resampler.cpp
     tests/test_content_analyzer.cpp
+    tests/test_vector_reconstruction.cpp
 )
 target_link_libraries(vektoryum_tests PRIVATE vektoryum_core)
 vektoryum_apply_warnings(vektoryum_tests)
