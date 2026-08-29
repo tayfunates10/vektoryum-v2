@@ -20,6 +20,7 @@ add_library(vektoryum_core STATIC
     src/resample/resampler.cpp
     src/restoration/photo_restoration.cpp
     src/training/dataset_contract.cpp
+    src/training/training_run_contract.cpp
     src/vector/path_quality.cpp
     src/vector/reconstruction.cpp
     src/vector/svg_path.cpp
@@ -80,6 +81,7 @@ add_executable(vektoryum_tests
     tests/test_photo_restoration.cpp
     tests/test_ml_runtime.cpp
     tests/test_dataset_contract.cpp
+    tests/test_training_run_contract.cpp
     tests/test_vector_reconstruction.cpp
     tests/test_svg_path.cpp
 )
