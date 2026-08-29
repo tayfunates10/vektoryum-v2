@@ -24,6 +24,9 @@ namespace {
         std::string(stable_schema_version),
         "request-0001",
         Operation::Version,
+        1024U,
+        2048U,
+        100U,
     };
 }
 
@@ -48,7 +51,10 @@ int main() {
     assert(report_a ==
            "schema_version=vektoryum.core-api.v1\n"
            "request_id=request-0001\n"
-           "operation=version\n");
+           "operation=version\n"
+           "input_bytes=1024\n"
+           "output_bytes=2048\n"
+           "work_units=100\n");
 
     const ResponseEnvelope success{
         std::string(stable_schema_version),
@@ -112,6 +118,24 @@ int main() {
     omitted_operation.request_id = "request-omitted-operation";
     assert(omitted_operation.operation == Operation::Unspecified);
     assert(validate_request_envelope(omitted_operation).error == RequestError::UnsupportedOperation);
+
+    limits = {};
+    invalid = baseline;
+    invalid.input_bytes = limits.max_input_bytes;
+    invalid.output_bytes = limits.max_output_bytes;
+    invalid.work_units = limits.max_work_units;
+    assert(validate_request_envelope(invalid, limits).ok());
+
+    invalid.input_bytes = limits.max_input_bytes + 1U;
+    assert(validate_request_envelope(invalid, limits).error == RequestError::InputTooLarge);
+
+    invalid = baseline;
+    invalid.output_bytes = limits.max_output_bytes + 1U;
+    assert(validate_request_envelope(invalid, limits).error == RequestError::OutputTooLarge);
+
+    invalid = baseline;
+    invalid.work_units = limits.max_work_units + 1U;
+    assert(validate_request_envelope(invalid, limits).error == RequestError::WorkLimitExceeded);
 
     return 0;
 }
