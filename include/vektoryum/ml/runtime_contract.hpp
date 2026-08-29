@@ -26,6 +26,8 @@ enum class RuntimeError : std::uint8_t {
     InvalidChannelContract,
     InvalidNormalization,
     InvalidPostprocessRange,
+    NonFiniteTensorData,
+    UnsupportedExecution,
 };
 
 enum class ExecutionProvider : std::uint8_t {
@@ -112,6 +114,15 @@ struct ContractValidation {
     }
 };
 
+struct InferenceResult {
+    RuntimeError error{RuntimeError::None};
+    std::vector<float> output{};
+
+    [[nodiscard]] bool ok() const noexcept {
+        return error == RuntimeError::None;
+    }
+};
+
 // Fail-closed validation for model identity/provenance and bounded tensor geometry.
 // Model artifacts must carry a lowercase 64-character SHA-256 hex digest.
 [[nodiscard]] ContractValidation validate_runtime_contract(
@@ -151,5 +162,28 @@ struct ContractValidation {
 [[nodiscard]] ContractValidation validate_inference_request(
     const InferenceRequest& request,
     RuntimeLimits limits = {}) noexcept;
+
+// Small project-owned deterministic CPU execution boundary used to prove that
+// Stage 7 owns model state and inference orchestration rather than only
+// validating caller-created receipts. It deliberately supports only the
+// explicit "vektoryum-reference" CPU backend and never falls back.
+class DeterministicReferenceRuntime {
+public:
+    [[nodiscard]] RuntimeError load(const ModelLoadReceipt& receipt) noexcept;
+    void unload() noexcept;
+    [[nodiscard]] bool loaded() const noexcept;
+
+    // Executes a deterministic nearest-index reference transform after applying
+    // the declared per-channel normalization, then clamps to the declared
+    // postprocess range. This is a runtime conformance primitive, not an ML
+    // quality model. Unsupported bindings fail closed.
+    [[nodiscard]] InferenceResult execute(
+        const ExecutionContract& contract,
+        const std::vector<float>& input,
+        RuntimeLimits limits = {}) const noexcept;
+
+private:
+    ModelLoadReceipt loaded_model_{};
+};
 
 }  // namespace vektoryum::ml
