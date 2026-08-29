@@ -34,6 +34,38 @@ namespace {
     return true;
 }
 
+[[nodiscard]] ContractValidation validate_tensor_shape(
+    const TensorShape& shape,
+    RuntimeLimits limits,
+    RuntimeError invalid_shape_error) noexcept {
+    ContractValidation result{};
+    const auto max_rank = static_cast<std::size_t>(limits.max_tensor_rank);
+    if (limits.max_tensor_rank == 0U || limits.max_tensor_elements == 0U ||
+        shape.dimensions.empty() || shape.dimensions.size() > max_rank) {
+        result.error = invalid_shape_error;
+        return result;
+    }
+
+    std::uint64_t elements = 1U;
+    for (const std::uint32_t extent : shape.dimensions) {
+        if (extent == 0U) {
+            result.error = RuntimeError::ZeroTensorExtent;
+            return result;
+        }
+        if (elements > std::numeric_limits<std::uint64_t>::max() / extent) {
+            result.error = RuntimeError::TensorElementOverflow;
+            return result;
+        }
+        elements *= extent;
+        if (elements > limits.max_tensor_elements) {
+            result.error = RuntimeError::TensorBudgetExceeded;
+            return result;
+        }
+    }
+    result.tensor_elements = elements;
+    return result;
+}
+
 }  // namespace
 
 ContractValidation validate_runtime_contract(
@@ -49,31 +81,42 @@ ContractValidation validate_runtime_contract(
         result.error = RuntimeError::InvalidModelVersion;
         return result;
     }
-    const auto max_rank = static_cast<std::size_t>(limits.max_tensor_rank);
-    if (limits.max_tensor_rank == 0U || limits.max_tensor_elements == 0U ||
-        input.dimensions.empty() || input.dimensions.size() > max_rank) {
-        result.error = RuntimeError::InvalidTensorRank;
+    return validate_tensor_shape(input, limits, RuntimeError::InvalidTensorRank);
+}
+
+ContractValidation validate_execution_contract(
+    const ExecutionContract& contract,
+    RuntimeLimits limits) noexcept {
+    auto result = validate_runtime_contract(contract.model, contract.input, limits);
+    if (!result.ok()) {
+        return result;
+    }
+    if (!nonempty_token(contract.binding.backend_id)) {
+        result.error = RuntimeError::InvalidBackend;
+        return result;
+    }
+    if (contract.binding.requested_provider == ExecutionProvider::Unknown ||
+        contract.binding.active_provider == ExecutionProvider::Unknown) {
+        result.error = RuntimeError::InvalidProvider;
+        return result;
+    }
+    if (contract.binding.fallback_used ||
+        contract.binding.active_provider != contract.binding.requested_provider) {
+        result.error = RuntimeError::SilentFallback;
+        return result;
+    }
+    if (!contract.binding.deterministic) {
+        result.error = RuntimeError::NonDeterministicProvider;
         return result;
     }
 
-    std::uint64_t elements = 1U;
-    for (const std::uint32_t extent : input.dimensions) {
-        if (extent == 0U) {
-            result.error = RuntimeError::ZeroTensorExtent;
-            return result;
-        }
-        if (elements > std::numeric_limits<std::uint64_t>::max() / extent) {
-            result.error = RuntimeError::TensorElementOverflow;
-            return result;
-        }
-        elements *= extent;
-        if (elements > limits.max_tensor_elements) {
-            result.error = RuntimeError::TensorBudgetExceeded;
-            return result;
-        }
+    const auto output = validate_tensor_shape(
+        contract.output, limits, RuntimeError::InvalidOutputTensor);
+    if (!output.ok()) {
+        result.error = output.error;
+        return result;
     }
-
-    result.tensor_elements = elements;
+    result.output_tensor_elements = output.tensor_elements;
     return result;
 }
 
