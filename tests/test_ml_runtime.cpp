@@ -61,11 +61,13 @@ int run_ml_runtime_tests() {
                     RuntimeError::InvalidTensorRank,
                 "zero rank limit rejected");
 
+    const RuntimeBinding binding{
+        "vektoryum-reference", ExecutionProvider::Cpu, ExecutionProvider::Cpu, true, false};
     const ExecutionContract execution{
         model,
         input,
         TensorShape{{1U, 3U, 512U, 512U}},
-        RuntimeBinding{"vektoryum-reference", ExecutionProvider::Cpu, ExecutionProvider::Cpu, true, false}};
+        binding};
     const auto execution_valid = validate_execution_contract(execution);
     expect_true(execution_valid.ok(), "explicit deterministic provider binding accepted");
     expect_true(execution_valid.tensor_elements == 196608U,
@@ -103,6 +105,58 @@ int run_ml_runtime_tests() {
                     execution_repeat.tensor_elements == execution_valid.tensor_elements &&
                     execution_repeat.output_tensor_elements == execution_valid.output_tensor_elements,
                 "execution contract validation is deterministic");
+
+    const ModelLoadReceipt load{model, binding, model.artifact_sha256, true};
+    expect_true(validate_model_load(load).ok(), "matching model load receipt accepted");
+
+    auto bad_load = load;
+    bad_load.loaded = false;
+    expect_true(validate_model_load(bad_load).error == RuntimeError::ModelNotLoaded,
+                "unloaded model rejected");
+
+    bad_load = load;
+    bad_load.loaded_artifact_sha256[0] = 'f';
+    expect_true(validate_model_load(bad_load).error == RuntimeError::ArtifactDigestMismatch,
+                "artifact digest mismatch rejected");
+
+    bad_load = load;
+    bad_load.binding.active_provider = ExecutionProvider::Cuda;
+    expect_true(validate_model_load(bad_load).error == RuntimeError::SilentFallback,
+                "model load provider substitution rejected");
+
+    const InferenceRequest inference{execution, load, 196608U, 786432U};
+    const auto inference_valid = validate_inference_request(inference);
+    expect_true(inference_valid.ok(), "matching loaded model and tensor storage accepted");
+
+    auto bad_inference = inference;
+    bad_inference.input_element_count = 196607U;
+    expect_true(validate_inference_request(bad_inference).error ==
+                    RuntimeError::TensorElementCountMismatch,
+                "undersized inference input storage rejected");
+
+    bad_inference = inference;
+    bad_inference.output_element_capacity = 786431U;
+    expect_true(validate_inference_request(bad_inference).error ==
+                    RuntimeError::TensorElementCountMismatch,
+                "undersized inference output storage rejected");
+
+    bad_inference = inference;
+    bad_inference.loaded_model.model.model_version = "2.0.0";
+    expect_true(validate_inference_request(bad_inference).error ==
+                    RuntimeError::ArtifactDigestMismatch,
+                "loaded model identity mismatch rejected");
+
+    bad_inference = inference;
+    bad_inference.loaded_model.binding.backend_id = "other-backend";
+    expect_true(validate_inference_request(bad_inference).error ==
+                    RuntimeError::ArtifactDigestMismatch,
+                "loaded backend mismatch rejected");
+
+    const auto inference_repeat = validate_inference_request(inference);
+    expect_true(inference_repeat.error == inference_valid.error &&
+                    inference_repeat.tensor_elements == inference_valid.tensor_elements &&
+                    inference_repeat.output_tensor_elements == inference_valid.output_tensor_elements,
+                "inference boundary validation is deterministic");
 
     return failures;
 }
