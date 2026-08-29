@@ -31,7 +31,10 @@ enum class ReconstructionError : std::uint8_t {
     ZeroDimension,
     SizeMismatch,
     SizeOverflow,
+    CoordinateOverflow,
+    NoForeground,
     NodeBudgetExceeded,
+    TopologyAmbiguity,
     BrokenContour,
 };
 
