@@ -97,6 +97,17 @@ int main() {
                 "noncanonical source digest is rejected");
 
     invalid = baseline;
+    invalid.contributions.push_back(invalid.contributions[1]);
+    invalid.contributions[2].contribution_id = "unknown-kind";
+    invalid.contributions[2].kind = static_cast<ContributionKind>(255U);
+    invalid.contributions[2].routing_class = RoutingClass::Geometry;
+    invalid.contributions[2].source_id = "unknown-source";
+    invalid.contributions[2].source_revision = "unknown-r1";
+    invalid.contributions[2].z_order = 2U;
+    expect_true(validate_hybrid_plan(invalid).error == HybridPlanError::RoutingKindMismatch,
+                "unknown contribution kind is rejected fail-closed");
+
+    invalid = baseline;
     invalid.contributions[0].routing_class = RoutingClass::PhotographicDetail;
     expect_true(validate_hybrid_plan(invalid).error == HybridPlanError::RoutingKindMismatch,
                 "geometry routed to raster class is rejected");
