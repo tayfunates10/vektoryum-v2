@@ -56,6 +56,50 @@ int run_vector_reconstruction_tests() {
     expect_true(certify_scene(ring.scene, donut, 7U, 7U).passed(),
                 "hole topology passes fidelity and self-intersection certification");
 
+    std::vector<std::uint8_t> nested(11U * 11U, 0U);
+    for (std::uint32_t y = 1U; y < 10U; ++y) {
+        for (std::uint32_t x = 1U; x < 10U; ++x) {
+            nested[static_cast<std::size_t>(y) * 11U + x] = 255U;
+        }
+    }
+    for (std::uint32_t y = 3U; y < 8U; ++y) {
+        for (std::uint32_t x = 3U; x < 8U; ++x) {
+            nested[static_cast<std::size_t>(y) * 11U + x] = 0U;
+        }
+    }
+    for (std::uint32_t y = 5U; y < 7U; ++y) {
+        for (std::uint32_t x = 5U; x < 7U; ++x) {
+            nested[static_cast<std::size_t>(y) * 11U + x] = 255U;
+        }
+    }
+    const auto nested_result = reconstruct_binary_mask(nested, 11U, 11U);
+    expect_true(nested_result.ok() && nested_result.scene.paths.size() == 3U,
+                "nested outer-hole-island topology reconstructs three contours");
+    const auto nested_quality = certify_scene(nested_result.scene, nested, 11U, 11U);
+    expect_true(nested_quality.passed() && nested_quality.raster_iou == 1.0 &&
+                    nested_quality.disagreement_ratio == 0.0,
+                "nested outer-hole-island topology round-trips exactly");
+
+    std::vector<std::uint8_t> thin_components(14U * 9U, 0U);
+    for (std::uint32_t x = 1U; x < 10U; ++x) {
+        thin_components[2U * 14U + x] = 255U;
+    }
+    for (std::uint32_t y = 2U; y < 7U; ++y) {
+        thin_components[static_cast<std::size_t>(y) * 14U + 9U] = 255U;
+    }
+    for (std::uint32_t y = 5U; y < 8U; ++y) {
+        for (std::uint32_t x = 11U; x < 13U; ++x) {
+            thin_components[static_cast<std::size_t>(y) * 14U + x] = 255U;
+        }
+    }
+    const auto thin_result = reconstruct_binary_mask(thin_components, 14U, 9U);
+    expect_true(thin_result.ok() && thin_result.scene.paths.size() == 2U,
+                "thin one-pixel corridor plus disconnected component reconstructs deterministically");
+    const auto thin_quality = certify_scene(thin_result.scene, thin_components, 14U, 9U);
+    expect_true(thin_quality.passed() && thin_quality.raster_iou == 1.0 &&
+                    thin_quality.disagreement_ratio == 0.0,
+                "thin and disconnected adversarial components round-trip exactly");
+
     const auto deterministic_a = reconstruct_binary_mask(donut, 7U, 7U);
     const auto deterministic_b = reconstruct_binary_mask(donut, 7U, 7U);
     expect_true(deterministic_a.ok() && deterministic_b.ok() &&
