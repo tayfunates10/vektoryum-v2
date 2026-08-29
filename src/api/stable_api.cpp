@@ -39,6 +39,15 @@ RequestValidation validate_request_envelope(
     if (!supported_operation(request.operation)) {
         return {RequestError::UnsupportedOperation};
     }
+    if (request.input_bytes > limits.max_input_bytes) {
+        return {RequestError::InputTooLarge};
+    }
+    if (request.output_bytes > limits.max_output_bytes) {
+        return {RequestError::OutputTooLarge};
+    }
+    if (request.work_units > limits.max_work_units) {
+        return {RequestError::WorkLimitExceeded};
+    }
     return {};
 }
 
@@ -66,6 +75,12 @@ std::string_view request_error_name(RequestError error) noexcept {
             return "unsafe_request_id";
         case RequestError::UnsupportedOperation:
             return "unsupported_operation";
+        case RequestError::InputTooLarge:
+            return "input_too_large";
+        case RequestError::OutputTooLarge:
+            return "output_too_large";
+        case RequestError::WorkLimitExceeded:
+            return "work_limit_exceeded";
     }
     return "unsupported_operation";
 }
@@ -86,6 +101,9 @@ std::string canonical_request_report(const RequestEnvelope& request) {
     stream << "schema_version=" << request.schema_version << '\n';
     stream << "request_id=" << request.request_id << '\n';
     stream << "operation=" << operation_name(request.operation) << '\n';
+    stream << "input_bytes=" << request.input_bytes << '\n';
+    stream << "output_bytes=" << request.output_bytes << '\n';
+    stream << "work_units=" << request.work_units << '\n';
     return stream.str();
 }
 
