@@ -25,12 +25,18 @@ enum class Operation : std::uint8_t {
 
 struct RequestLimits {
     std::size_t max_request_id_bytes{128U};
+    std::uint64_t max_input_bytes{64U * 1024U * 1024U};
+    std::uint64_t max_output_bytes{256U * 1024U * 1024U};
+    std::uint64_t max_work_units{1'000'000U};
 };
 
 struct RequestEnvelope {
     std::string schema_version;
     std::string request_id;
     Operation operation{Operation::Unspecified};
+    std::uint64_t input_bytes{0U};
+    std::uint64_t output_bytes{0U};
+    std::uint64_t work_units{0U};
 };
 
 enum class RequestError : std::uint8_t {
@@ -40,6 +46,9 @@ enum class RequestError : std::uint8_t {
     RequestIdTooLarge,
     UnsafeRequestId,
     UnsupportedOperation,
+    InputTooLarge,
+    OutputTooLarge,
+    WorkLimitExceeded,
 };
 
 struct RequestValidation {
