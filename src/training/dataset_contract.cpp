@@ -1,7 +1,11 @@
 #include "vektoryum/training/dataset_contract.hpp"
 
+#include <algorithm>
 #include <limits>
 #include <unordered_set>
+#include <vector>
+
+#include "vektoryum/ml/artifact_digest.hpp"
 
 namespace vektoryum::training {
 
@@ -23,6 +27,17 @@ namespace {
 [[nodiscard]] DatasetContractResult fail(DatasetContractError error, std::size_t index,
                                          std::uint64_t total_bytes) noexcept {
     return DatasetContractResult{error, index, total_bytes};
+}
+
+void append_binding_field(std::vector<std::uint8_t>& bytes, std::string_view value) {
+    bytes.insert(bytes.end(), value.begin(), value.end());
+    bytes.push_back(0U);
+}
+
+[[nodiscard]] bool license_allowed(std::string_view license_id,
+                                   const DatasetLimits& limits) noexcept {
+    return std::find(limits.allowed_license_ids.begin(), limits.allowed_license_ids.end(),
+                     license_id) != limits.allowed_license_ids.end();
 }
 
 }  // namespace
@@ -59,6 +74,18 @@ DatasetSplit deterministic_split(std::string_view content_sha256,
     return DatasetSplit::Test;
 }
 
+std::string dataset_rights_binding_sha256(const DatasetSample& sample) {
+    std::vector<std::uint8_t> bytes;
+    bytes.reserve(sample.content_sha256.size() + sample.license_id.size() +
+                  sample.rights_statement.size() + sample.rights_grant_source.size() + 5U);
+    append_binding_field(bytes, sample.content_sha256);
+    append_binding_field(bytes, sample.license_id);
+    append_binding_field(bytes, sample.rights_statement);
+    append_binding_field(bytes, sample.rights_grant_source);
+    bytes.push_back(sample.production_training_authorized ? 1U : 0U);
+    return ml::sha256_hex(bytes);
+}
+
 DatasetContractResult validate_dataset_manifest(const DatasetManifest& manifest,
                                                 const DatasetLimits& limits) {
     if (manifest.dataset_id.empty() || manifest.version.empty()) {
@@ -85,11 +112,21 @@ DatasetContractResult validate_dataset_manifest(const DatasetManifest& manifest,
         if (!is_sha256_hex(sample.content_sha256)) {
             return fail(DatasetContractError::InvalidContentDigest, index, total_bytes);
         }
-        if (sample.license_id.empty() || sample.rights_statement.empty()) {
+        if (sample.license_id.empty() || sample.rights_statement.empty() ||
+            sample.rights_grant_source.empty()) {
             return fail(DatasetContractError::MissingRightsProvenance, index, total_bytes);
+        }
+        if (!license_allowed(sample.license_id, limits)) {
+            return fail(DatasetContractError::LicenseNotAllowed, index, total_bytes);
         }
         if (!sample.production_training_authorized) {
             return fail(DatasetContractError::ProductionTrainingUnauthorized, index, total_bytes);
+        }
+        if (!is_sha256_hex(sample.rights_binding_sha256)) {
+            return fail(DatasetContractError::InvalidRightsBinding, index, total_bytes);
+        }
+        if (dataset_rights_binding_sha256(sample) != sample.rights_binding_sha256) {
+            return fail(DatasetContractError::RightsBindingMismatch, index, total_bytes);
         }
         if (sample.byte_size == 0U) {
             return fail(DatasetContractError::ZeroSampleBytes, index, total_bytes);
@@ -97,7 +134,7 @@ DatasetContractResult validate_dataset_manifest(const DatasetManifest& manifest,
         if (sample.byte_size > limits.max_sample_bytes) {
             return fail(DatasetContractError::SampleByteBudgetExceeded, index, total_bytes);
         }
-        if (sample.byte_size > limits.max_total_bytes - total_bytes) {
+        if (total_bytes > limits.max_total_bytes || sample.byte_size > limits.max_total_bytes - total_bytes) {
             return fail(DatasetContractError::TotalByteBudgetExceeded, index, total_bytes);
         }
         total_bytes += sample.byte_size;
