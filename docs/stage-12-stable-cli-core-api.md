@@ -21,10 +21,11 @@ The first slice introduces `vektoryum.core-api.v1` as the stable API envelope sc
 
 The second slice adds an explicit stable response envelope with status, exit-code and request-error fields plus deterministic canonical serialization. Stable textual names are defined for every current request error and response status, success/error response fixtures are byte-for-byte repeatable, and no Stage 0-11 or existing Stage 12 gate is weakened.
 
+The third slice adds explicit public-boundary resource accounting to each request envelope: declared input bytes, output bytes and work units are serialized deterministically and validated against immutable default ceilings of 64 MiB input, 256 MiB output and 1,000,000 work units. Exact-boundary requests are accepted, while a one-unit excursion beyond any ceiling fails closed with a stable request error. Existing request-id, schema, operation, response, sanitizer and Stage 0-11 gates remain unchanged.
+
 ## Remaining acceptance
 
 - Bind processing/export API operations to exact validated Stage 11 certificate artifacts rather than free-form identifiers.
-- Add bounded input/output/work accounting at the public API boundary.
 - Add adversarial CLI parsing and response/error stream fixtures across platforms.
 - Add end-to-end repeatability for canonical API/CLI operations and provenance substitution rejection.
 - Require fresh exact-head source hygiene, Ubuntu, Windows, macOS and Linux ASan/UBSan green, mergeable=true and zero unresolved blocking review threads before Stage 12 completion.
