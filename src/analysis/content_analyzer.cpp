@@ -46,14 +46,20 @@ ContentAnalysis classify_features(const ContentFeatures& features) noexcept {
     result.features = f;
     result.valid = true;
 
-    if (f.color_complexity <= 0.10 && f.flat_region_ratio >= 0.68 && f.edge_density >= 0.14) {
+    // Transparent logos and silhouettes can encode all of their geometry in alpha
+    // while RGB stays constant. Treat alpha transitions as structural boundaries so
+    // they participate in vector-routing decisions rather than falling back merely
+    // because their luminance edge density is zero.
+    const double structural_edge = std::max(f.edge_density, f.alpha_transition_ratio);
+
+    if (f.color_complexity <= 0.10 && f.flat_region_ratio >= 0.68 && structural_edge >= 0.14) {
         result.kind = ContentKind::LineArt;
         result.route = ProcessingRoute::VectorReconstruction;
-        result.confidence = clamp01(0.55 + 0.25 * f.flat_region_ratio + 0.20 * f.edge_density);
+        result.confidence = clamp01(0.55 + 0.25 * f.flat_region_ratio + 0.20 * structural_edge);
         return result;
     }
 
-    if (f.color_complexity <= 0.20 && f.flat_region_ratio >= 0.58 && f.edge_density >= 0.04 &&
+    if (f.color_complexity <= 0.20 && f.flat_region_ratio >= 0.58 && structural_edge >= 0.04 &&
         f.texture_energy <= 0.18) {
         result.kind = ContentKind::Logo;
         result.route = ProcessingRoute::VectorReconstruction;
@@ -66,10 +72,10 @@ ContentAnalysis classify_features(const ContentFeatures& features) noexcept {
     // the signature we use for photo+graphics/typography composites. Evaluating
     // the photo rule first would swallow these samples and incorrectly bypass
     // the hybrid pipeline.
-    if (f.color_complexity >= 0.18 && f.edge_density >= 0.08 && f.flat_region_ratio >= 0.30) {
+    if (f.color_complexity >= 0.18 && structural_edge >= 0.08 && f.flat_region_ratio >= 0.30) {
         result.kind = ContentKind::Mixed;
         result.route = ProcessingRoute::Hybrid;
-        result.confidence = clamp01(0.46 + 0.18 * f.edge_density + 0.18 * f.color_complexity +
+        result.confidence = clamp01(0.46 + 0.18 * structural_edge + 0.18 * f.color_complexity +
                                     0.18 * f.flat_region_ratio);
         return result;
     }
