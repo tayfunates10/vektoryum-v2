@@ -145,4 +145,52 @@ QualityCertificateIssueResult issue_quality_certificate(
     return {validation, std::move(artifact)};
 }
 
+CanonicalMetricMeasurement measure_canonical_export_metrics(
+    const exporting::ExportRequest& export_request,
+    const hybrid::HybridOutputManifest& source_output,
+    const exporting::EncodedExportArtifact& export_artifact,
+    const exporting::ExportLimits& export_limits,
+    const exporting::ExportExecutionLimits& export_execution_limits) {
+    const auto artifact_validation = exporting::validate_encoded_export_artifact(
+        export_request, source_output, export_artifact, export_limits, export_execution_limits);
+    if (!artifact_validation.ok()) {
+        return {{QualityCertificateError::InvalidExportArtifact, 0U}, 0U, 0U, 0U, {}};
+    }
+
+    const std::uint64_t output_bytes = static_cast<std::uint64_t>(export_artifact.bytes.size());
+    CanonicalMetricMeasurement measurement;
+    measurement.sample_count = static_cast<std::uint64_t>(export_request.width) * export_request.height;
+    measurement.execution_units = export_artifact.execution_units;
+    measurement.peak_memory_bytes = export_artifact.peak_intermediate_bytes;
+    measurement.metrics = {
+        MetricGate{"export_bytes", static_cast<double>(output_bytes), 1.0,
+                   static_cast<double>(export_request.estimated_output_bytes)},
+        MetricGate{"peak_intermediate_bytes", static_cast<double>(export_artifact.peak_intermediate_bytes), 1.0,
+                   static_cast<double>(export_execution_limits.max_intermediate_bytes)},
+        MetricGate{"seam_error", source_output.seam_error, 0.0, 0.01},
+        MetricGate{"work_units", static_cast<double>(export_artifact.execution_units), 1.0,
+                   static_cast<double>(export_execution_limits.max_execution_units)},
+    };
+
+    QualityCertificateRequest measured_request;
+    measured_request.schema_version = "vektoryum.quality.measurement.v1";
+    measured_request.certificate_id = "measurement";
+    measured_request.input_sha256 = export_artifact.source_output_sha256;
+    measured_request.output_sha256 = export_artifact.output_sha256;
+    measured_request.toolchain_revision = "measurement";
+    measured_request.sample_count = measurement.sample_count;
+    measured_request.execution_units = measurement.execution_units;
+    measured_request.metrics = measurement.metrics;
+
+    const QualityCertificateLimits measurement_limits{
+        export_limits.max_pixels,
+        export_execution_limits.max_execution_units,
+        measurement.metrics.size(),
+    };
+    measurement.validation = validate_quality_certificate_request(
+        measured_request, export_request, source_output, export_artifact, measurement_limits, export_limits,
+        export_execution_limits);
+    return measurement;
+}
+
 }  // namespace vektoryum::certification
