@@ -5,18 +5,21 @@
 #include <limits>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "vektoryum/export/canonical_encoder.hpp"
 #include "vektoryum/ml/artifact_digest.hpp"
 
 namespace {
 
+using vektoryum::certification::CanonicalQualityFixture;
 using vektoryum::certification::MetricGate;
 using vektoryum::certification::QualityCertificateError;
 using vektoryum::certification::QualityCertificateRequest;
 using vektoryum::certification::canonical_quality_certificate_report;
 using vektoryum::certification::issue_quality_certificate;
 using vektoryum::certification::measure_canonical_export_metrics;
+using vektoryum::certification::measure_canonical_quality_metrics;
 using vektoryum::certification::validate_quality_certificate_request;
 using vektoryum::exporting::EncodedExportArtifact;
 using vektoryum::exporting::ExportFormat;
@@ -83,6 +86,73 @@ int main() {
 
     if (!validate(request).ok()) {
         std::cerr << "valid certificate request rejected\n";
+        return EXIT_FAILURE;
+    }
+
+    const CanonicalQualityFixture perfect_quality{
+        std::vector<std::uint8_t>{0U, 64U, 128U, 255U},
+        std::vector<std::uint8_t>{0U, 64U, 128U, 255U},
+        std::vector<std::uint8_t>{0U, 1U, 1U, 0U},
+        std::vector<std::uint8_t>{0U, 1U, 1U, 0U},
+    };
+    const auto quality_a = measure_canonical_quality_metrics(perfect_quality);
+    const auto quality_b = measure_canonical_quality_metrics(perfect_quality);
+    if (!quality_a.ok() || !quality_b.ok() || quality_a.sample_count != 4U || quality_a.metrics.size() != 2U ||
+        quality_a.metrics[0].name != "alpha_mae" || quality_a.metrics[0].measured != 0.0 ||
+        quality_a.metrics[0].maximum != 0.02 || quality_a.metrics[1].name != "vector_iou" ||
+        quality_a.metrics[1].measured != 1.0 || quality_a.metrics[1].minimum != 0.99) {
+        std::cerr << "canonical quality fixture measurement mismatch\n";
+        return EXIT_FAILURE;
+    }
+    if (quality_a.sample_count != quality_b.sample_count || quality_a.metrics.size() != quality_b.metrics.size()) {
+        std::cerr << "canonical quality repeatability failed\n";
+        return EXIT_FAILURE;
+    }
+    for (std::size_t i = 0U; i < quality_a.metrics.size(); ++i) {
+        if (quality_a.metrics[i].name != quality_b.metrics[i].name ||
+            quality_a.metrics[i].measured != quality_b.metrics[i].measured ||
+            quality_a.metrics[i].minimum != quality_b.metrics[i].minimum ||
+            quality_a.metrics[i].maximum != quality_b.metrics[i].maximum) {
+            std::cerr << "canonical quality evidence is not repeatable\n";
+            return EXIT_FAILURE;
+        }
+    }
+
+    auto bad_alpha = perfect_quality;
+    bad_alpha.candidate_alpha[1] = 255U;
+    if (measure_canonical_quality_metrics(bad_alpha).error != QualityCertificateError::ThresholdViolation) {
+        std::cerr << "excessive alpha error passed canonical quality gate\n";
+        return EXIT_FAILURE;
+    }
+
+    CanonicalQualityFixture bad_vector;
+    bad_vector.reference_alpha.assign(100U, 255U);
+    bad_vector.candidate_alpha.assign(100U, 255U);
+    bad_vector.reference_vector_mask.assign(100U, 1U);
+    bad_vector.candidate_vector_mask.assign(100U, 1U);
+    bad_vector.candidate_vector_mask[0] = 0U;
+    bad_vector.candidate_vector_mask[1] = 0U;
+    if (measure_canonical_quality_metrics(bad_vector).error != QualityCertificateError::ThresholdViolation) {
+        std::cerr << "sub-threshold vector IoU passed canonical quality gate\n";
+        return EXIT_FAILURE;
+    }
+
+    auto malformed_quality = perfect_quality;
+    malformed_quality.candidate_alpha.pop_back();
+    if (measure_canonical_quality_metrics(malformed_quality).error != QualityCertificateError::InvalidQualityFixture) {
+        std::cerr << "mismatched canonical quality fixture accepted\n";
+        return EXIT_FAILURE;
+    }
+
+    malformed_quality = perfect_quality;
+    malformed_quality.candidate_vector_mask[0] = 2U;
+    if (measure_canonical_quality_metrics(malformed_quality).error != QualityCertificateError::InvalidQualityFixture) {
+        std::cerr << "non-binary vector mask accepted\n";
+        return EXIT_FAILURE;
+    }
+
+    if (measure_canonical_quality_metrics(perfect_quality, 3U).error != QualityCertificateError::SampleBudgetExceeded) {
+        std::cerr << "canonical quality sample budget not enforced\n";
         return EXIT_FAILURE;
     }
 
