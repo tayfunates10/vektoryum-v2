@@ -14,6 +14,7 @@ add_library(vektoryum_core STATIC
     src/core/color.cpp
     src/core/image.cpp
     src/core/tile.cpp
+    src/export/export_artifact_contract.cpp
     src/export/export_contract.cpp
     src/hybrid/alpha_composite.cpp
     src/hybrid/hybrid_output_contract.cpp
@@ -134,6 +135,12 @@ add_executable(vektoryum_export_contract_tests
 target_link_libraries(vektoryum_export_contract_tests PRIVATE vektoryum_core)
 vektoryum_apply_warnings(vektoryum_export_contract_tests)
 
+add_executable(vektoryum_export_artifact_contract_tests
+    tests/test_export_artifact_contract.cpp
+)
+target_link_libraries(vektoryum_export_artifact_contract_tests PRIVATE vektoryum_core)
+vektoryum_apply_warnings(vektoryum_export_artifact_contract_tests)
+
 if(VEKTORYUM_ENABLE_SANITIZERS AND NOT MSVC)
     target_compile_options(vektoryum_tests PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
     target_link_options(vektoryum_tests PRIVATE -fsanitize=address,undefined)
@@ -151,6 +158,8 @@ if(VEKTORYUM_ENABLE_SANITIZERS AND NOT MSVC)
     target_link_options(vektoryum_hybrid_mixed_content_tests PRIVATE -fsanitize=address,undefined)
     target_compile_options(vektoryum_export_contract_tests PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
     target_link_options(vektoryum_export_contract_tests PRIVATE -fsanitize=address,undefined)
+    target_compile_options(vektoryum_export_artifact_contract_tests PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+    target_link_options(vektoryum_export_artifact_contract_tests PRIVATE -fsanitize=address,undefined)
 endif()
 
 add_test(NAME vektoryum.unit COMMAND vektoryum_tests)
@@ -161,3 +170,4 @@ add_test(NAME vektoryum.alpha_composite COMMAND vektoryum_alpha_composite_tests)
 add_test(NAME vektoryum.hybrid_output_contract COMMAND vektoryum_hybrid_output_contract_tests)
 add_test(NAME vektoryum.hybrid_mixed_content COMMAND vektoryum_hybrid_mixed_content_tests)
 add_test(NAME vektoryum.export_contract COMMAND vektoryum_export_contract_tests)
+add_test(NAME vektoryum.export_artifact_contract COMMAND vektoryum_export_artifact_contract_tests)
