@@ -19,6 +19,7 @@ add_library(vektoryum_core STATIC
     src/ml/runtime_contract.cpp
     src/resample/resampler.cpp
     src/restoration/photo_restoration.cpp
+    src/training/benchmark_result_contract.cpp
     src/training/dataset_contract.cpp
     src/training/training_run_contract.cpp
     src/vector/path_quality.cpp
@@ -93,12 +94,21 @@ add_executable(vektoryum_training_contract_tests
 target_link_libraries(vektoryum_training_contract_tests PRIVATE vektoryum_core)
 vektoryum_apply_warnings(vektoryum_training_contract_tests)
 
+add_executable(vektoryum_benchmark_contract_tests
+    tests/test_benchmark_result_contract.cpp
+)
+target_link_libraries(vektoryum_benchmark_contract_tests PRIVATE vektoryum_core)
+vektoryum_apply_warnings(vektoryum_benchmark_contract_tests)
+
 if(VEKTORYUM_ENABLE_SANITIZERS AND NOT MSVC)
     target_compile_options(vektoryum_tests PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
     target_link_options(vektoryum_tests PRIVATE -fsanitize=address,undefined)
     target_compile_options(vektoryum_training_contract_tests PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
     target_link_options(vektoryum_training_contract_tests PRIVATE -fsanitize=address,undefined)
+    target_compile_options(vektoryum_benchmark_contract_tests PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+    target_link_options(vektoryum_benchmark_contract_tests PRIVATE -fsanitize=address,undefined)
 endif()
 
 add_test(NAME vektoryum.unit COMMAND vektoryum_tests)
 add_test(NAME vektoryum.training_contract COMMAND vektoryum_training_contract_tests)
+add_test(NAME vektoryum.benchmark_contract COMMAND vektoryum_benchmark_contract_tests)
