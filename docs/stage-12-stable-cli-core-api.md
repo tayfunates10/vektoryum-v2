@@ -23,9 +23,10 @@ The second slice adds an explicit stable response envelope with status, exit-cod
 
 The third slice adds explicit public-boundary resource accounting to each request envelope: declared input bytes, output bytes and work units are serialized deterministically and validated against immutable default ceilings of 64 MiB input, 256 MiB output and 1,000,000 work units. Exact-boundary requests are accepted, while a one-unit excursion beyond any ceiling fails closed with a stable request error. Existing request-id, schema, operation, response, sanitizer and Stage 0-11 gates remain unchanged.
 
+The fourth slice introduces the first processing/export operation as `certified_export` and makes the ordinary envelope fail closed with `missing_certificate_evidence`; it cannot be accepted through the version-only validation path. A certified operation request must carry the exact lowercase Stage 11 certificate digest and must be validated alongside the concrete `QualityCertificateArtifact`. Validation requires bounded request accounting, a structurally valid certificate artifact, an exact SHA-256 recomputation over the artifact's canonical certificate bytes, and exact equality between the request evidence identity and the artifact digest. Canonical certified-request serialization includes that digest deterministically. Regressions reject missing certificate evidence, digest substitution, tampered canonical certificate bytes, malformed certificate digests and operation substitution. These tests remain in the existing Stage 12 CTest target and therefore run in normal cross-platform CI and Linux ASan/UBSan coverage.
+
 ## Remaining acceptance
 
-- Bind processing/export API operations to exact validated Stage 11 certificate artifacts rather than free-form identifiers.
 - Add adversarial CLI parsing and response/error stream fixtures across platforms.
-- Add end-to-end repeatability for canonical API/CLI operations and provenance substitution rejection.
+- Add end-to-end repeatability for canonical API/CLI operations and provenance substitution rejection, including issuance-to-public-API handoff using actual Stage 11 certification fixtures rather than synthetic certificate objects.
 - Require fresh exact-head source hygiene, Ubuntu, Windows, macOS and Linux ASan/UBSan green, mergeable=true and zero unresolved blocking review threads before Stage 12 completion.
