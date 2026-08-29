@@ -44,6 +44,8 @@ RequestValidation validate_request_envelope(
 
 std::string_view operation_name(Operation operation) noexcept {
     switch (operation) {
+        case Operation::Unspecified:
+            return "unsupported";
         case Operation::Version:
             return "version";
     }
