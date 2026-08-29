@@ -1,6 +1,7 @@
 #include <iostream>
 #include <limits>
 #include <string_view>
+#include <vector>
 
 #include "vektoryum/ml/runtime_contract.hpp"
 
@@ -219,6 +220,36 @@ int run_ml_runtime_tests() {
                     inference_repeat.tensor_elements == inference_valid.tensor_elements &&
                     inference_repeat.output_tensor_elements == inference_valid.output_tensor_elements,
                 "inference boundary validation is deterministic");
+
+    DeterministicReferenceRuntime runtime;
+    expect_true(!runtime.loaded(), "reference runtime starts unloaded");
+    expect_true(runtime.load(load) == RuntimeError::None && runtime.loaded(),
+                "reference runtime owns verified loaded-model state");
+
+    const std::vector<float> runtime_input(196608U, 0.75F);
+    const auto runtime_result = runtime.execute(execution, runtime_input);
+    expect_true(runtime_result.ok() && runtime_result.output.size() == 786432U,
+                "reference runtime executes bounded output geometry");
+    expect_true(runtime_result.ok() && runtime_result.output.front() == 0.5F &&
+                    runtime_result.output.back() == 0.5F,
+                "reference runtime applies deterministic normalization and postprocess bounds");
+    const auto runtime_repeat = runtime.execute(execution, runtime_input);
+    expect_true(runtime_repeat.error == runtime_result.error && runtime_repeat.output == runtime_result.output,
+                "reference runtime execution is exactly repeatable");
+
+    auto nonfinite_input = runtime_input;
+    nonfinite_input[17U] = std::numeric_limits<float>::quiet_NaN();
+    expect_true(runtime.execute(execution, nonfinite_input).error == RuntimeError::NonFiniteTensorData,
+                "reference runtime rejects non-finite input samples");
+
+    auto unsupported_load = load;
+    unsupported_load.binding.backend_id = "other-backend";
+    expect_true(runtime.load(unsupported_load) == RuntimeError::UnsupportedExecution,
+                "reference runtime rejects backend substitution without fallback");
+
+    runtime.unload();
+    expect_true(!runtime.loaded() && runtime.execute(execution, runtime_input).error == RuntimeError::ModelNotLoaded,
+                "reference runtime unload fails closed before execution");
 
     return failures;
 }
