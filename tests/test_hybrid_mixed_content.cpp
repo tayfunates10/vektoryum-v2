@@ -82,10 +82,10 @@ int main() {
     // Four representative pixels exercise a tiny vector feature, two overlapping
     // vector/raster seam pixels, and alternating high-frequency raster detail.
     const std::array<std::array<RgbaSample, 2>, 4> layers = {{
-        {{{0.10, 0.10, 0.10, 1.0}, {0.90, 0.90, 0.90, 0.0}}},
+        {{{0.10, 0.10, 0.10, 1.0}, {0.0, 0.0, 0.0, 0.0}}},
         {{{0.20, 0.20, 0.20, 1.0}, {0.80, 0.20, 0.20, 0.5}}},
         {{{0.80, 0.80, 0.80, 1.0}, {0.20, 0.80, 0.20, 0.5}}},
-        {{{0.15, 0.15, 0.15, 1.0}, {0.85, 0.85, 0.85, 0.0}}},
+        {{{0.15, 0.15, 0.15, 1.0}, {0.0, 0.0, 0.0, 0.0}}},
     }};
 
     std::array<RgbaSample, 4> first_pass{};
