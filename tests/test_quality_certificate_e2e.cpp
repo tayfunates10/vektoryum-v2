@@ -51,6 +51,19 @@ using vektoryum::hybrid::HybridOutputManifest;
     };
 }
 
+[[nodiscard]] CanonicalQualityFixture exact_threshold_quality_fixture() {
+    CanonicalQualityFixture fixture;
+    fixture.reference_alpha.assign(100U, 0U);
+    fixture.candidate_alpha.assign(100U, 5U);
+    for (std::size_t index = 0U; index < 10U; ++index) {
+        fixture.candidate_alpha[index] = 6U;
+    }
+    fixture.reference_vector_mask.assign(100U, 1U);
+    fixture.candidate_vector_mask.assign(100U, 1U);
+    fixture.candidate_vector_mask.back() = 0U;
+    return fixture;
+}
+
 [[nodiscard]] QualityCertificateRequest measured_request(
     const std::string& certificate_id,
     const vektoryum::exporting::EncodedExportArtifact& artifact,
@@ -153,6 +166,45 @@ using vektoryum::hybrid::HybridOutputManifest;
     return true;
 }
 
+[[nodiscard]] bool verify_exact_threshold_repeatability() {
+    const CanonicalQualityFixture fixture = exact_threshold_quality_fixture();
+    const auto measured_a = measure_canonical_quality_metrics(fixture);
+    const auto measured_b = measure_canonical_quality_metrics(fixture);
+    if (!measured_a.ok() || !measured_b.ok() || measured_a.metrics.size() != 2U || measured_b.metrics.size() != 2U) {
+        std::cerr << "exact-threshold Stage 11 quality fixture was rejected\n";
+        return false;
+    }
+    if (measured_a.metrics[0].name != "alpha_mae" || measured_a.metrics[0].measured != 0.02 ||
+        measured_a.metrics[1].name != "vector_iou" || measured_a.metrics[1].measured != 0.99) {
+        std::cerr << "exact-threshold Stage 11 quality evidence drifted\n";
+        return false;
+    }
+    for (std::size_t index = 0U; index < measured_a.metrics.size(); ++index) {
+        if (measured_a.metrics[index].name != measured_b.metrics[index].name ||
+            measured_a.metrics[index].measured != measured_b.metrics[index].measured ||
+            measured_a.metrics[index].minimum != measured_b.metrics[index].minimum ||
+            measured_a.metrics[index].maximum != measured_b.metrics[index].maximum) {
+            std::cerr << "exact-threshold Stage 11 quality evidence is not repeatable\n";
+            return false;
+        }
+    }
+
+    auto alpha_over = fixture;
+    ++alpha_over.candidate_alpha[10];
+    if (measure_canonical_quality_metrics(alpha_over).error != QualityCertificateError::ThresholdViolation) {
+        std::cerr << "just-over-threshold alpha fixture was accepted\n";
+        return false;
+    }
+
+    auto iou_under = fixture;
+    iou_under.candidate_vector_mask[98] = 0U;
+    if (measure_canonical_quality_metrics(iou_under).error != QualityCertificateError::ThresholdViolation) {
+        std::cerr << "just-under-threshold vector IoU fixture was accepted\n";
+        return false;
+    }
+    return true;
+}
+
 }  // namespace
 
 int main() {
@@ -160,6 +212,15 @@ int main() {
         return EXIT_FAILURE;
     }
     if (!certify_format(ExportFormat::Pdf, "stage11-e2e-pdf", "stage11-cert-pdf")) {
+        return EXIT_FAILURE;
+    }
+    if (!certify_format(ExportFormat::Eps, "stage11-e2e-eps", "stage11-cert-eps")) {
+        return EXIT_FAILURE;
+    }
+    if (!certify_format(ExportFormat::Dxf, "stage11-e2e-dxf", "stage11-cert-dxf")) {
+        return EXIT_FAILURE;
+    }
+    if (!verify_exact_threshold_repeatability()) {
         return EXIT_FAILURE;
     }
     return EXIT_SUCCESS;
