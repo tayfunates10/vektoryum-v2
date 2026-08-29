@@ -23,6 +23,8 @@ The export request contract introduces an explicit SVG/PDF/EPS/DXF format enum, 
 
 The encoded export artifact contract adds exact request/source identity binding for produced bytes, canonical SHA-256 output provenance using the repository SHA-256 implementation, output-size enforcement against the validated request budget, bounded peak intermediate memory and execution units, and fail-closed format-specific structural envelopes for SVG, PDF, EPS and DXF. Adversarial CTest regressions cover format/identity/source substitution, malformed or mismatched output digests, empty/oversized outputs, zero/excess execution resources and malformed format structure. The target is included in normal cross-platform tests and Linux sanitizer builds.
 
+The canonical encoder slice adds deterministic SVG/PDF/EPS/DXF byte generation from the same validated request/source-output pair, routes every produced artifact back through the Stage 10 artifact validator, records the actual output SHA-256, and proves repeated identical validated input produces identical bytes and digest for all four formats. Invalid source provenance and caller output-byte budget violations fail closed. The dedicated target is part of normal cross-platform CTest and Linux sanitizer coverage.
+
 ## Remaining acceptance
 
-Implement canonical SVG/PDF/EPS/DXF byte encoders that generate the validated structures, prove identical validated input/configuration yields identical output bytes, add safe metadata/path contracts, and add adversarial end-to-end exporter fixtures before Stage 10 can be completed.
+Add safe metadata/path contracts and adversarial end-to-end exporter fixtures that exercise the canonical encoders with hostile metadata/path inputs and exact output provenance before Stage 10 can be completed.
