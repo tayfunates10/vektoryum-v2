@@ -268,7 +268,10 @@ ContractValidation validate_inference_request(
     return result;
 }
 
-RuntimeError DeterministicReferenceRuntime::load(const ModelLoadReceipt& receipt) noexcept {
+RuntimeError DeterministicReferenceRuntime::load(
+    const ModelLoadReceipt& receipt,
+    const std::vector<std::uint8_t>& artifact,
+    RuntimeLimits limits) {
     const auto validation = validate_model_load(receipt);
     if (!validation.ok()) {
         return validation.error;
@@ -276,16 +279,25 @@ RuntimeError DeterministicReferenceRuntime::load(const ModelLoadReceipt& receipt
     if (!reference_binding(receipt.binding)) {
         return RuntimeError::UnsupportedExecution;
     }
+    if (artifact.empty()) {
+        return RuntimeError::EmptyModelArtifact;
+    }
+    if (limits.max_model_artifact_bytes == 0U ||
+        static_cast<std::uint64_t>(artifact.size()) > limits.max_model_artifact_bytes) {
+        return RuntimeError::ModelArtifactBudgetExceeded;
+    }
     loaded_model_ = receipt;
+    loaded_artifact_ = artifact;
     return RuntimeError::None;
 }
 
 void DeterministicReferenceRuntime::unload() noexcept {
     loaded_model_ = ModelLoadReceipt{};
+    loaded_artifact_.clear();
 }
 
 bool DeterministicReferenceRuntime::loaded() const noexcept {
-    return loaded_model_.loaded;
+    return loaded_model_.loaded && !loaded_artifact_.empty();
 }
 
 InferenceResult DeterministicReferenceRuntime::execute(
