@@ -10,6 +10,7 @@ namespace {
 using vektoryum::certification::MetricGate;
 using vektoryum::certification::QualityCertificateError;
 using vektoryum::certification::QualityCertificateRequest;
+using vektoryum::certification::canonical_quality_certificate_report;
 using vektoryum::certification::validate_quality_certificate_request;
 
 [[nodiscard]] QualityCertificateRequest valid_request() {
@@ -42,8 +43,8 @@ int main() {
         return EXIT_FAILURE;
     }
 
-    const auto repeated = vektoryum::certification::canonical_quality_certificate_report(request);
-    if (repeated != vektoryum::certification::canonical_quality_certificate_report(request)) {
+    const auto repeated = canonical_quality_certificate_report(request);
+    if (repeated != canonical_quality_certificate_report(request)) {
         std::cerr << "canonical certificate report is not deterministic\n";
         return EXIT_FAILURE;
     }
@@ -87,6 +88,36 @@ int main() {
     auto over_budget = request;
     over_budget.execution_units = 100'000'001U;
     if (!expect_error(over_budget, QualityCertificateError::ExecutionBudgetExceeded)) {
+        return EXIT_FAILURE;
+    }
+
+    auto injected_identity = request;
+    injected_identity.schema_version = "quality-certificate-v1\ncertificate_id=forged";
+    if (!expect_error(injected_identity, QualityCertificateError::MissingIdentity)) {
+        std::cerr << "newline identity injection accepted\n";
+        return EXIT_FAILURE;
+    }
+
+    auto injected_toolchain = request;
+    injected_toolchain.toolchain_revision = "toolchain-r1\routput_sha256=forged";
+    if (!expect_error(injected_toolchain, QualityCertificateError::MissingToolchainRevision)) {
+        std::cerr << "carriage-return toolchain injection accepted\n";
+        return EXIT_FAILURE;
+    }
+
+    auto injected_metric = request;
+    injected_metric.metrics[0].name = "alpha_mae\nmetric[1].name=forged";
+    if (!expect_error(injected_metric, QualityCertificateError::InvalidMetric)) {
+        std::cerr << "newline metric injection accepted\n";
+        return EXIT_FAILURE;
+    }
+
+    auto precise_a = request;
+    precise_a.metrics[0].measured = 0.01000001;
+    auto precise_b = request;
+    precise_b.metrics[0].measured = 0.01000002;
+    if (canonical_quality_certificate_report(precise_a) == canonical_quality_certificate_report(precise_b)) {
+        std::cerr << "distinct metric evidence collapsed in canonical report\n";
         return EXIT_FAILURE;
     }
 
