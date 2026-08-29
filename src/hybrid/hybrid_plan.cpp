@@ -23,6 +23,10 @@ namespace {
            });
 }
 
+[[nodiscard]] bool is_known_contribution_kind(ContributionKind kind) noexcept {
+    return kind == ContributionKind::Vector || kind == ContributionKind::Raster;
+}
+
 [[nodiscard]] bool route_matches_kind(RoutingClass routing_class,
                                       ContributionKind kind) noexcept {
     return (routing_class == RoutingClass::Geometry && kind == ContributionKind::Vector) ||
@@ -109,6 +113,10 @@ HybridPlanValidation validate_hybrid_plan(const HybridPlan& plan,
         }
         if (!is_lower_hex_sha256(contribution.source_sha256)) {
             return fail(HybridPlanError::InvalidSourceDigest, index, pixels,
+                        intermediate_bytes, execution_units);
+        }
+        if (!is_known_contribution_kind(contribution.kind)) {
+            return fail(HybridPlanError::RoutingKindMismatch, index, pixels,
                         intermediate_bytes, execution_units);
         }
         if (!route_matches_kind(contribution.routing_class, contribution.kind)) {
