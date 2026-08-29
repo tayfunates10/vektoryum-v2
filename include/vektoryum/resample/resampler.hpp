@@ -19,6 +19,7 @@ enum class ResampleError : std::uint8_t {
     InvalidChannelCount,
     SourceSizeMismatch,
     SizeOverflow,
+    NonFiniteSample,
 };
 
 struct FloatImage {
