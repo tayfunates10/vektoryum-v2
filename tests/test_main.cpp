@@ -14,6 +14,8 @@
 
 int run_resampler_tests();
 int run_content_analyzer_tests();
+int run_vector_reconstruction_tests();
+int run_svg_path_tests();
 
 namespace {
 
@@ -144,6 +146,8 @@ int main() {
     test_decode_limits();
     failures += run_resampler_tests();
     failures += run_content_analyzer_tests();
+    failures += run_vector_reconstruction_tests();
+    failures += run_svg_path_tests();
 
     if (failures != 0) {
         std::cerr << failures << " test(s) failed\n";
