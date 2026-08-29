@@ -60,6 +60,21 @@ int run_vector_reconstruction_tests() {
     expect_true(reconstruct_binary_mask(rectangle, 6U, 5U, tiny_budget).error ==
                     ReconstructionError::NodeBudgetExceeded,
                 "node budget fails closed");
+
+    std::vector<std::uint8_t> checkerboard(64U * 64U, 0U);
+    for (std::uint32_t y = 0U; y < 64U; ++y) {
+        for (std::uint32_t x = 0U; x < 64U; ++x) {
+            if (((x + y) & 1U) == 0U) {
+                checkerboard[static_cast<std::size_t>(y) * 64U + x] = 255U;
+            }
+        }
+    }
+    ReconstructionOptions adversarial_budget{};
+    adversarial_budget.max_nodes = 8U;
+    expect_true(reconstruct_binary_mask(checkerboard, 64U, 64U, adversarial_budget).error ==
+                    ReconstructionError::NodeBudgetExceeded,
+                "adversarial boundary extraction respects node budget immediately");
+
     expect_true(reconstruct_binary_mask(rectangle, 0U, 5U).error == ReconstructionError::ZeroDimension,
                 "zero dimensions are rejected");
     expect_true(reconstruct_binary_mask(std::span<const std::uint8_t>(rectangle.data(), rectangle.size() - 1U),
