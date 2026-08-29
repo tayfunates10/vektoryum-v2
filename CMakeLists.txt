@@ -15,6 +15,7 @@ add_library(vektoryum_core STATIC
     src/core/image.cpp
     src/core/tile.cpp
     src/io/limits.cpp
+    src/ml/runtime_contract.cpp
     src/resample/resampler.cpp
     src/restoration/photo_restoration.cpp
     src/vector/path_quality.cpp
@@ -75,6 +76,7 @@ add_executable(vektoryum_tests
     tests/test_resampler.cpp
     tests/test_content_analyzer.cpp
     tests/test_photo_restoration.cpp
+    tests/test_ml_runtime.cpp
     tests/test_vector_reconstruction.cpp
     tests/test_svg_path.cpp
 )
