@@ -20,6 +20,8 @@ struct DatasetSample {
     std::string content_sha256;
     std::string license_id;
     std::string rights_statement;
+    std::string rights_grant_source;
+    std::string rights_binding_sha256;
     bool production_training_authorized{false};
     std::uint64_t byte_size{0U};
     DatasetSplit split{DatasetSplit::Train};
@@ -36,6 +38,7 @@ struct DatasetLimits {
     std::size_t max_samples{100'000U};
     std::uint64_t max_total_bytes{64ULL * 1024ULL * 1024ULL * 1024ULL};
     std::uint64_t max_sample_bytes{512ULL * 1024ULL * 1024ULL};
+    std::vector<std::string> allowed_license_ids{"CC0-1.0"};
 };
 
 enum class DatasetContractError : std::uint8_t {
@@ -46,6 +49,9 @@ enum class DatasetContractError : std::uint8_t {
     MissingSampleIdentity,
     InvalidContentDigest,
     MissingRightsProvenance,
+    LicenseNotAllowed,
+    InvalidRightsBinding,
+    RightsBindingMismatch,
     ProductionTrainingUnauthorized,
     ZeroSampleBytes,
     SampleByteBudgetExceeded,
@@ -66,6 +72,7 @@ struct DatasetContractResult {
 [[nodiscard]] bool is_sha256_hex(std::string_view value) noexcept;
 [[nodiscard]] DatasetSplit deterministic_split(std::string_view content_sha256,
                                                std::uint64_t split_seed) noexcept;
+[[nodiscard]] std::string dataset_rights_binding_sha256(const DatasetSample& sample);
 [[nodiscard]] DatasetContractResult validate_dataset_manifest(
     const DatasetManifest& manifest, const DatasetLimits& limits = {});
 
