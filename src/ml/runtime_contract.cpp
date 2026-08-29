@@ -11,8 +11,9 @@ namespace {
     if (value.empty()) {
         return false;
     }
-    for (const unsigned char character : value) {
-        if (std::iscntrl(character) != 0 || std::isspace(character) != 0) {
+    for (const char character : value) {
+        const auto code_unit = static_cast<unsigned char>(character);
+        if (std::iscntrl(code_unit) != 0 || std::isspace(code_unit) != 0) {
             return false;
         }
     }
