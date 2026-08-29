@@ -4,12 +4,31 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 
 namespace vektoryum::restoration {
 namespace {
 
 [[nodiscard]] float clamp01(float value) noexcept {
     return std::clamp(value, 0.0F, 1.0F);
+}
+
+[[nodiscard]] bool valid_image_shape(const resample::FloatImage& image) noexcept {
+    if (image.width == 0U || image.height == 0U || image.channels == 0U) {
+        return false;
+    }
+    const auto width = static_cast<std::size_t>(image.width);
+    const auto height = static_cast<std::size_t>(image.height);
+    const auto channels = static_cast<std::size_t>(image.channels);
+    const auto maximum = std::numeric_limits<std::size_t>::max();
+    if (width > maximum / height) {
+        return false;
+    }
+    const std::size_t pixels = width * height;
+    if (pixels > maximum / channels) {
+        return false;
+    }
+    return pixels * channels == image.pixels.size();
 }
 
 [[nodiscard]] float neighborhood_mean(
@@ -38,7 +57,7 @@ PhotoRestorationResult restore_photo(
     const resample::FloatImage& source,
     PhotoRestorationOptions options) {
     PhotoRestorationResult result{};
-    if (!source.valid()) {
+    if (!valid_image_shape(source)) {
         result.error = RestorationError::InvalidImage;
         return result;
     }
