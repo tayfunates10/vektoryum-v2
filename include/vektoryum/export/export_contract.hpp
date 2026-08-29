@@ -4,6 +4,8 @@
 #include <cstdint>
 #include <string>
 
+#include "vektoryum/hybrid/hybrid_output_contract.hpp"
+
 namespace vektoryum::exporting {
 
 enum class ExportFormat : std::uint8_t {
@@ -33,9 +35,12 @@ enum class ExportRequestError : std::uint8_t {
     None,
     MissingSchemaVersion,
     MissingExportIdentity,
+    UnsafeTextField,
     UnsupportedFormat,
     MissingSourceOutputIdentity,
     InvalidSourceOutputDigest,
+    SourceOutputIdentityMismatch,
+    SourceOutputDigestMismatch,
     ZeroDimension,
     PixelBudgetExceeded,
     ZeroEstimatedOutputBytes,
@@ -50,7 +55,9 @@ struct ExportRequestValidation {
 };
 
 [[nodiscard]] ExportRequestValidation validate_export_request(
-    const ExportRequest& request, const ExportLimits& limits = {});
+    const ExportRequest& request,
+    const hybrid::HybridOutputManifest& source_output,
+    const ExportLimits& limits = {});
 
 [[nodiscard]] std::string canonical_export_request_report(const ExportRequest& request);
 
