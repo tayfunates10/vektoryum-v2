@@ -1,0 +1,74 @@
+name: core-ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: core-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  source-hygiene:
+    name: source-hygiene
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check UTF-8, whitespace and source invariants
+        run: python3 tools/check_source_hygiene.py
+
+  build-test:
+    name: build-test (${{ matrix.os }})
+    needs: source-hygiene
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure
+        run: cmake -S . -B build -DVEKTORYUM_WARNINGS_AS_ERRORS=ON
+
+      - name: Build
+        run: cmake --build build --config Release --parallel
+
+      - name: Test
+        run: ctest --test-dir build -C Release --output-on-failure
+
+      - name: CLI smoke test (Unix)
+        if: runner.os != 'Windows'
+        run: ./build/vektoryum_cli
+
+      - name: CLI smoke test (Windows)
+        if: runner.os == 'Windows'
+        run: .\build\Release\vektoryum_cli.exe
+
+  sanitizers:
+    name: sanitizers (linux)
+    needs: source-hygiene
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure ASan/UBSan
+        run: cmake -S . -B build-sanitize -DCMAKE_BUILD_TYPE=Debug -DVEKTORYUM_ENABLE_SANITIZERS=ON -DVEKTORYUM_WARNINGS_AS_ERRORS=ON
+
+      - name: Build
+        run: cmake --build build-sanitize --parallel
+
+      - name: Test under sanitizers
+        env:
+          ASAN_OPTIONS: detect_leaks=1:halt_on_error=1
+          UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
+        run: ctest --test-dir build-sanitize --output-on-failure
