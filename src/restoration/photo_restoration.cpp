@@ -51,6 +51,57 @@ namespace {
     return static_cast<float>(sum / static_cast<double>(count));
 }
 
+[[nodiscard]] float premultiplied_neighborhood_mean(
+    const resample::FloatImage& image,
+    std::uint32_t x,
+    std::uint32_t y,
+    std::uint8_t channel) noexcept {
+    double rgb_sum = 0.0;
+    double alpha_sum = 0.0;
+    const std::uint32_t x0 = x == 0U ? 0U : x - 1U;
+    const std::uint32_t y0 = y == 0U ? 0U : y - 1U;
+    const std::uint32_t x1 = std::min<std::uint32_t>(image.width - 1U, x + 1U);
+    const std::uint32_t y1 = std::min<std::uint32_t>(image.height - 1U, y + 1U);
+    for (std::uint32_t yy = y0; yy <= y1; ++yy) {
+        for (std::uint32_t xx = x0; xx <= x1; ++xx) {
+            rgb_sum += static_cast<double>(image.pixels[image.index(xx, yy, channel)]);
+            alpha_sum += static_cast<double>(image.pixels[image.index(xx, yy, 3U)]);
+        }
+    }
+
+    const float target_alpha = image.pixels[image.index(x, y, 3U)];
+    if (target_alpha <= 0.0F || alpha_sum <= 0.0) {
+        return 0.0F;
+    }
+    const double straight_mean = rgb_sum / alpha_sum;
+    return std::clamp(static_cast<float>(straight_mean * static_cast<double>(target_alpha)),
+                      0.0F,
+                      target_alpha);
+}
+
+[[nodiscard]] float filtered_mean(
+    const resample::FloatImage& image,
+    std::uint32_t x,
+    std::uint32_t y,
+    std::uint8_t channel) noexcept {
+    if (image.channels == 4U && channel < 3U) {
+        return premultiplied_neighborhood_mean(image, x, y, channel);
+    }
+    return neighborhood_mean(image, x, y, channel);
+}
+
+[[nodiscard]] float clamp_processed_sample(
+    const resample::FloatImage& image,
+    std::uint32_t x,
+    std::uint32_t y,
+    float value) noexcept {
+    if (image.channels == 4U) {
+        const float alpha = image.pixels[image.index(x, y, 3U)];
+        return std::clamp(value, 0.0F, alpha);
+    }
+    return clamp01(value);
+}
+
 }  // namespace
 
 PhotoRestorationResult restore_photo(
@@ -90,8 +141,11 @@ PhotoRestorationResult restore_photo(
         for (std::uint32_t x = 0U; x < source.width; ++x) {
             for (std::uint8_t c = 0U; c < processed_channels; ++c) {
                 const std::size_t index = source.index(x, y, c);
-                const float mean = neighborhood_mean(source, x, y, c);
-                denoised.pixels[index] = clamp01(
+                const float mean = filtered_mean(source, x, y, c);
+                denoised.pixels[index] = clamp_processed_sample(
+                    source,
+                    x,
+                    y,
                     source.pixels[index] + options.denoise_strength * (mean - source.pixels[index]));
             }
         }
@@ -102,8 +156,11 @@ PhotoRestorationResult restore_photo(
             for (std::uint8_t c = 0U; c < processed_channels; ++c) {
                 const std::size_t index = source.index(x, y, c);
                 const float base = denoised.pixels[index];
-                const float local = neighborhood_mean(denoised, x, y, c);
-                result.image.pixels[index] = clamp01(
+                const float local = filtered_mean(denoised, x, y, c);
+                result.image.pixels[index] = clamp_processed_sample(
+                    source,
+                    x,
+                    y,
                     base + options.sharpen_strength * (base - local));
             }
             if (source.channels == 4U) {

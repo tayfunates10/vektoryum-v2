@@ -54,6 +54,24 @@ int run_photo_restoration_tests() {
     expect_true(alpha_exact, "restoration preserves alpha exactly");
     expect_true(bounded, "restoration output remains normalized");
 
+    resample::FloatImage premult_edge{2U, 1U, 4U,
+        {0.0F, 0.0F, 0.0F, 0.0F,
+         1.0F, 0.0F, 0.0F, 1.0F}};
+    const auto premult_restored = restoration::restore_photo(premult_edge, {1.0F, 1.0F});
+    expect_true(premult_restored.ok(), "premultiplied RGBA edge restoration succeeds");
+    bool premultiplied_invariant = true;
+    for (std::uint32_t x = 0U; x < premult_edge.width; ++x) {
+        const float alpha = premult_restored.image.pixels[premult_edge.index(x, 0U, 3U)];
+        for (std::uint8_t c = 0U; c < 3U; ++c) {
+            premultiplied_invariant = premultiplied_invariant &&
+                premult_restored.image.pixels[premult_edge.index(x, 0U, c)] <= alpha;
+        }
+    }
+    expect_true(premultiplied_invariant,
+                "premultiplied RGBA filtering never creates RGB above alpha");
+    expect_true(premult_restored.image.pixels[premult_edge.index(0U, 0U, 0U)] == 0.0F,
+                "transparent pixel remains colorless across opaque edge");
+
     auto non_finite = constant;
     non_finite.pixels[0] = std::numeric_limits<float>::quiet_NaN();
     expect_true(restoration::restore_photo(non_finite).error == restoration::RestorationError::NonFiniteSample,
