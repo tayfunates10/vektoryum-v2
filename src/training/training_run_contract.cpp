@@ -13,6 +13,18 @@ namespace {
     return TrainingRunContractResult{error, index};
 }
 
+[[nodiscard]] bool is_lower_hex_sha256(const std::string& value) noexcept {
+    if (value.size() != 64U) {
+        return false;
+    }
+    for (const char c : value) {
+        if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'))) {
+            return false;
+        }
+    }
+    return true;
+}
+
 }  // namespace
 
 TrainingRunContractResult validate_training_run_manifest(const TrainingRunManifest& manifest,
@@ -29,8 +41,23 @@ TrainingRunContractResult validate_training_run_manifest(const TrainingRunManife
     if (manifest.model_id.empty() || manifest.model_version.empty()) {
         return fail(TrainingRunContractError::MissingModelIdentity, 0U);
     }
+    if (manifest.architecture_revision.empty()) {
+        return fail(TrainingRunContractError::MissingArchitectureRevision, 0U);
+    }
+    if (manifest.training_code_revision.empty()) {
+        return fail(TrainingRunContractError::MissingTrainingCodeRevision, 0U);
+    }
+    if (manifest.degradation_pipeline_revision.empty()) {
+        return fail(TrainingRunContractError::MissingDegradationPipelineRevision, 0U);
+    }
     if (manifest.runtime_id.empty() || manifest.runtime_version.empty()) {
         return fail(TrainingRunContractError::MissingRuntimeIdentity, 0U);
+    }
+    if (manifest.artifact_sha256.empty()) {
+        return fail(TrainingRunContractError::MissingArtifactChecksum, 0U);
+    }
+    if (!is_lower_hex_sha256(manifest.artifact_sha256)) {
+        return fail(TrainingRunContractError::InvalidArtifactChecksum, 0U);
     }
     if (manifest.max_steps == 0U) {
         return fail(TrainingRunContractError::ZeroMaxSteps, 0U);
