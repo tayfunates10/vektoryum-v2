@@ -33,6 +33,8 @@ int main() {
     static_assert(static_cast<int>(ExitCode::Usage) == 64);
     static_assert(static_cast<int>(ExitCode::Data) == 65);
     static_assert(static_cast<int>(ExitCode::Software) == 70);
+    static_assert(static_cast<int>(Operation::Unspecified) == 0);
+    static_assert(static_cast<int>(Operation::Version) == 1);
 
     const RequestEnvelope baseline = valid_request();
     assert(validate_request_envelope(baseline).ok());
@@ -66,6 +68,12 @@ int main() {
     invalid = baseline;
     invalid.operation = static_cast<Operation>(255);
     assert(validate_request_envelope(invalid).error == RequestError::UnsupportedOperation);
+
+    RequestEnvelope omitted_operation{};
+    omitted_operation.schema_version = std::string(stable_schema_version);
+    omitted_operation.request_id = "request-omitted-operation";
+    assert(omitted_operation.operation == Operation::Unspecified);
+    assert(validate_request_envelope(omitted_operation).error == RequestError::UnsupportedOperation);
 
     return 0;
 }
