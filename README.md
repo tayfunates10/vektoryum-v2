@@ -1,7 +1,7 @@
 # Vektoryum v2
 
-> **Durum:** Core Engine Aşama 0–1 tamamlandı — **%10**
-> **Aktif aşama:** Aşama 2 — Image Core: renk, alfa, tile ve I/O sözleşmeleri
+> **Durum:** Core Engine Aşama 0–2 tamamlandı — **%18**
+> **Aktif aşama:** Aşama 3 — Kendi analitik yüksek kaliteli raster resampler motoru
 > **Çalışma modeli:** Branch → Pull Request → test/CI → yalnızca yeşilse `main` merge → sonraki aşama
 
 Vektoryum v2; logo, çizim, ikon, illüstrasyon, ekran grafiği ve fotoğraf gibi farklı raster görselleri içerik türüne göre analiz eden; mümkün olan en yüksek algısal ve geometrik sadakatle büyüten, gerektiğinde yeniden yapılandıran ve vektörleştirilebilir içerikleri gerçek vektör geometrisine dönüştüren profesyonel bir görüntü işleme motorudur.
@@ -86,8 +86,8 @@ Yüzdeler iş yükü ve ürün riskine göre ağırlıklandırılmıştır. Bir 
 |---|---|---:|---|---|
 | 0 | Ürün şartnamesi, kalite ilkeleri, yol haritası | **4%** | README + kalite politikası + PR/CI çalışma kuralı | ✅ |
 | 1 | Repository Foundation & CI | **6%** | Proje iskeleti, format/lint, unit test runner, sanitizers, CI matrisi | ✅ |
-| 2 | Image Core: renk, alfa, tile, I/O sözleşmeleri | **8%** | Bit-depth/alpha/color invariants + tile seam testleri | ⏳ |
-| 3 | Kendi analitik yüksek kaliteli raster resampler motoru | **8%** | 2×/4×/8×; edge/ringing/aliasing kalite kapıları | ⬜ |
+| 2 | Image Core: renk, alfa, tile, I/O sözleşmeleri | **8%** | Bit-depth/alpha/color invariants + tile seam testleri | ✅ |
+| 3 | Kendi analitik yüksek kaliteli raster resampler motoru | **8%** | 2×/4×/8×; edge/ringing/aliasing kalite kapıları | ⏳ |
 | 4 | Content Analyzer & deterministic router | **5%** | photo/logo/line-art/mixed ayrımı + confidence + fallback | ⬜ |
 | 5 | Logo/çizim için gerçek vector reconstruction engine | **12%** | topology, contour, corner, Bézier, fill/stroke, alpha + SVG | ⬜ |
 | 6 | Photo restoration + non-ML super-resolution çekirdeği | **12%** | blur/noise/JPEG/edge test setlerinde baseline üstünlüğü | ⬜ |
@@ -98,7 +98,7 @@ Yüzdeler iş yükü ve ürün riskine göre ağırlıklandırılmıştır. Bir 
 | 11 | Geniş kalite, fuzz, adversarial, performans ve bellek sertifikasyonu | **6%** | bütün zorunlu kalite kapıları yeşil | ⬜ |
 | 12 | Stabil CLI/Core API ve entegrasyon sözleşmesi | **3%** | versioned API, batch mode, errors, cancellation, progress | ⬜ |
 | 13 | Release hardening, dokümantasyon ve reproducible release | **3%** | release checklist + temiz kurulumdan doğrulanmış build | ⬜ |
-| | **CORE ENGINE TOPLAM** | **100%** | | **%10** |
+| | **CORE ENGINE TOPLAM** | **100%** | | **%18** |
 
 > **UI + kullanıcı hesabı + abonelik/ödeme sistemi bu %100 Core Engine hesabına dahil değildir.** Core Engine %100 olduktan ve kalite sertifikasyonu geçtikten sonra ayrı “Product Layer” yol haritası açılacaktır.
 
@@ -243,7 +243,8 @@ geliştirilecektir. Bu katman Core Engine kalite hedeflerini değiştirmeyecekti
 |---|---|---:|
 | 2026-08-29 | Repo bootstrap edildi; ürün kapsamı, kalite politikası ve 13 aşamalı teknik yol haritası oluşturuldu. | **%4** |
 | 2026-08-29 | Aşama 1 tamamlandı; C++20 çekirdek iskeleti, repo-içi test/source-hygiene kapısı, üç işletim sistemi CI matrisi ve ASan/UBSan yeşil olarak PR #2 ile main'e alındı. | **%10** |
+| 2026-08-29 | Aşama 2 tamamlandı; ImageSpec, bit-depth/alpha/color invariants, güvenli tile planı ve decode resource budget kontrolleri PR #3 ile main'e alındı. | **%18** |
 
 ---
 
-**Sıradaki iş:** Aşama 2 — Image Core: bit-depth, renk uzayı, alfa semantiği, tile/overlap sözleşmesi ve güvenli I/O sınırlarını test-first olarak kurmak.
+**Sıradaki iş:** Aşama 3 — kendi analitik resampler motorunu 2×/4×/8×, ringing/overshoot, anti-aliasing, determinism ve cross-platform kalite kapılarıyla tamamlamak.
