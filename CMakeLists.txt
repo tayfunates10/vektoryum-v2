@@ -17,6 +17,7 @@ add_library(vektoryum_core STATIC
     src/export/canonical_encoder.cpp
     src/export/export_artifact_contract.cpp
     src/export/export_contract.cpp
+    src/export/export_destination_contract.cpp
     src/hybrid/alpha_composite.cpp
     src/hybrid/hybrid_output_contract.cpp
     src/hybrid/hybrid_plan.cpp
@@ -109,6 +110,10 @@ add_executable(vektoryum_canonical_encoder_tests tests/test_canonical_encoder.cp
 target_link_libraries(vektoryum_canonical_encoder_tests PRIVATE vektoryum_core)
 vektoryum_apply_warnings(vektoryum_canonical_encoder_tests)
 
+add_executable(vektoryum_export_destination_contract_tests tests/test_export_destination_contract.cpp)
+target_link_libraries(vektoryum_export_destination_contract_tests PRIVATE vektoryum_core)
+vektoryum_apply_warnings(vektoryum_export_destination_contract_tests)
+
 if(VEKTORYUM_ENABLE_SANITIZERS AND NOT MSVC)
     foreach(target
         vektoryum_tests
@@ -120,7 +125,8 @@ if(VEKTORYUM_ENABLE_SANITIZERS AND NOT MSVC)
         vektoryum_hybrid_mixed_content_tests
         vektoryum_export_contract_tests
         vektoryum_export_artifact_contract_tests
-        vektoryum_canonical_encoder_tests)
+        vektoryum_canonical_encoder_tests
+        vektoryum_export_destination_contract_tests)
         target_compile_options(${target} PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
         target_link_options(${target} PRIVATE -fsanitize=address,undefined)
     endforeach()
@@ -136,3 +142,4 @@ add_test(NAME vektoryum.hybrid_mixed_content COMMAND vektoryum_hybrid_mixed_cont
 add_test(NAME vektoryum.export_contract COMMAND vektoryum_export_contract_tests)
 add_test(NAME vektoryum.export_artifact_contract COMMAND vektoryum_export_artifact_contract_tests)
 add_test(NAME vektoryum.canonical_encoder COMMAND vektoryum_canonical_encoder_tests)
+add_test(NAME vektoryum.export_destination_contract COMMAND vektoryum_export_destination_contract_tests)
