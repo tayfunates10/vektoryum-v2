@@ -51,6 +51,7 @@ enum class QualityCertificateError : std::uint8_t {
     DuplicateMetric,
     NonDeterministicMetricOrder,
     ThresholdViolation,
+    InvalidQualityFixture,
 };
 
 struct QualityCertificateValidation {
@@ -84,6 +85,20 @@ struct CanonicalMetricMeasurement {
     [[nodiscard]] bool ok() const noexcept { return error == QualityCertificateError::None; }
 };
 
+struct CanonicalQualityFixture {
+    std::vector<std::uint8_t> reference_alpha;
+    std::vector<std::uint8_t> candidate_alpha;
+    std::vector<std::uint8_t> reference_vector_mask;
+    std::vector<std::uint8_t> candidate_vector_mask;
+};
+
+struct CanonicalQualityMeasurement {
+    QualityCertificateError error{QualityCertificateError::None};
+    std::uint64_t sample_count{0U};
+    std::vector<MetricGate> metrics;
+    [[nodiscard]] bool ok() const noexcept { return error == QualityCertificateError::None; }
+};
+
 [[nodiscard]] QualityCertificateValidation validate_quality_certificate_request(
     const QualityCertificateRequest& request,
     const exporting::ExportRequest& export_request,
@@ -107,5 +122,8 @@ struct CanonicalMetricMeasurement {
     const exporting::EncodedExportArtifact& export_artifact,
     const exporting::ExportLimits& export_limits = {},
     const exporting::ExportExecutionLimits& export_execution_limits = {});
+[[nodiscard]] CanonicalQualityMeasurement measure_canonical_quality_metrics(
+    const CanonicalQualityFixture& fixture,
+    std::uint64_t max_samples = 1'000'000U);
 
 }  // namespace vektoryum::certification
