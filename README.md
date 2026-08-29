@@ -1,10 +1,10 @@
 # Vektoryum v2
 
-Core Engine progress: **88%**
+Core Engine progress: **94%**
 
-Completed: Stages 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10.
+Completed: Stages 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11.
 
-Active: **Stage 11 — Quality/performance certification**.
+Active: **Stage 12 — Stable CLI/Core API**.
 
 Workflow: branch → pull request → CI → merge only after all required checks pass.
 
@@ -23,8 +23,8 @@ Workflow: branch → pull request → CI → merge only after all required check
 | 8 | Training/data/benchmark pipeline | 7% | done |
 | 9 | Hybrid reconstruction | 7% | done |
 | 10 | Exporters | 5% | done |
-| 11 | Quality/performance certification | 6% | active |
-| 12 | Stable CLI/Core API | 3% | planned |
+| 11 | Quality/performance certification | 6% | done |
+| 12 | Stable CLI/Core API | 3% | active |
 | 13 | Release hardening | 3% | planned |
 
 ## Progress
@@ -40,5 +40,6 @@ Workflow: branch → pull request → CI → merge only after all required check
 - 76%: Stage 8 merged in PR #9 after deterministic dataset manifests/splits, byte-verified sample provenance, fail-closed license/rights authorization and digest-to-rights binding, leakage prevention, deterministic training/model provenance, benchmark metric/result/artifact provenance, canonical reports, bounded resources, adversarial regressions, cross-platform build/tests and ASan/UBSan all passed with zero unresolved blocking review threads.
 - 83%: Stage 9 merged in PR #11 after deterministic hybrid planning/routing, immutable vector/raster source provenance, bounded fusion resources, alpha-safe composition, seam/topology protection, no silent raster fallback, deterministic canonical output provenance, adversarial mixed-content execution coverage, cross-platform build/tests and ASan/UBSan all passed with zero unresolved blocking review threads.
 - 88%: Stage 10 merged in PR #12 after deterministic SVG/PDF/EPS/DXF request, artifact and encoder contracts; exact hybrid-output and output-digest provenance; bounded dimensions/output/intermediate/execution resources; format structural validation; deterministic identical-input bytes; fail-closed destination/metadata safety; adversarial end-to-end exporter fixtures; cross-platform build/tests and ASan/UBSan all passed with zero unresolved blocking review threads.
+- 94%: Stage 11 merged in PR #13 after exact Stage 10 artifact binding, deterministic certificate bytes/SHA-256 evidence, measured bounded export resource/performance evidence, canonical alpha MAE/vector IoU quality fixtures, exact immutable threshold boundaries, SVG/PDF/EPS/DXF end-to-end repeatability, adversarial provenance/tamper/threshold regressions, cross-platform build/tests and Linux ASan/UBSan all passed with zero unresolved blocking review threads.
 
-Next: implement Stage 11 Quality/performance certification with deterministic quality metrics, bounded benchmark resources, fail-closed acceptance certificates, adversarial quality/performance regressions and cross-platform sanitizer coverage without weakening existing gates.
+Next: implement Stage 12 Stable CLI/Core API with deterministic versioned request/response contracts, stable exit/error semantics, bounded inputs/outputs, direct binding to the validated Stage 11 certification chain, adversarial API/CLI regressions and cross-platform sanitizer coverage without weakening existing gates.
