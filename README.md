@@ -1,10 +1,10 @@
 # Vektoryum v2
 
-Core Engine progress: **55%**
+Core Engine progress: **69%**
 
-Completed: Stages 0, 1, 2, 3, 4, 5, 6.
+Completed: Stages 0, 1, 2, 3, 4, 5, 6, 7.
 
-Active: **Stage 7 — Vektoryum ML/DL model/runtime**.
+Active: **Stage 8 — Training/data/benchmark pipeline**.
 
 Workflow: branch → pull request → CI → merge only after all required checks pass.
 
@@ -19,8 +19,8 @@ Workflow: branch → pull request → CI → merge only after all required check
 | 4 | Content analyzer/router | 5% | done |
 | 5 | Vector reconstruction | 12% | done |
 | 6 | Photo restoration and non-ML SR | 12% | done |
-| 7 | Vektoryum ML/DL model/runtime | 14% | active |
-| 8 | Training/data/benchmark pipeline | 7% | planned |
+| 7 | Vektoryum ML/DL model/runtime | 14% | done |
+| 8 | Training/data/benchmark pipeline | 7% | active |
 | 9 | Hybrid reconstruction | 7% | planned |
 | 10 | Exporters | 5% | planned |
 | 11 | Quality/performance certification | 6% | planned |
@@ -36,5 +36,6 @@ Workflow: branch → pull request → CI → merge only after all required check
 - 31%: Stage 4 merged in PR #5 after deterministic content routing, mixed-vs-photo precedence, alpha-defined silhouette routing, cross-platform build/tests and ASan/UBSan all passed with zero unresolved review threads.
 - 43%: Stage 5 merged in PR #6 after topology-safe raster-to-vector reconstruction, self-intersection and node-complexity safety, SVG-ready curve/path contracts, direct rasterize-back IoU/disagreement certification, adversarial topology regressions, cross-platform build/tests and ASan/UBSan all passed with zero unresolved blocking review threads.
 - 55%: Stage 6 merged in PR #7 after deterministic bounded denoise/deblock/sharpen restoration, 2x/4x project-owned non-ML super-resolution, strict validation and output budgets, premultiplied-alpha-safe processing, anti-ringing/halo/overshoot regressions, cross-platform build/tests and ASan/UBSan all passed with zero unresolved blocking review threads.
+- 69%: Stage 7 merged in PR #8 after deterministic project-owned ML/DL runtime contracts, byte-verified SHA-256 model provenance, owned bounded artifact loading, strict tensor/preprocess/postprocess interfaces, backend/provider isolation, no-silent-fallback enforcement, deterministic reference execution, adversarial invalid-model/input regressions, cross-platform build/tests and ASan/UBSan all passed with zero unresolved blocking review threads.
 
-Next: implement Stage 7 Vektoryum ML/DL model/runtime with deterministic runtime contracts, explicit model/version provenance, bounded resource behavior, safe fallback policy, testable tensor interfaces, and cross-platform regression coverage without weakening existing quality gates.
+Next: implement Stage 8 Training/data/benchmark pipeline with deterministic dataset manifests and splits, immutable sample provenance, bounded preprocessing, reproducible benchmark execution, metric/version provenance, leakage protection, fail-closed malformed data handling, and cross-platform regression coverage without weakening existing quality gates.
