@@ -25,6 +25,8 @@ The planning contract validates schema/plan identity, bounded dimensions and con
 
 The routing/provenance contract adds deterministic content-class routing: geometry is vector-owned and photographic detail is raster-owned. Every contribution must carry an immutable source identity, source revision and canonical lowercase SHA-256 digest. Aggregate intermediate-memory and execution-unit accounting is overflow-safe and bounded. Missing provenance, route/kind mismatches, zero resource declarations and aggregate budget overflow all fail closed with adversarial regressions.
 
+The alpha-composition contract validates every RGBA channel as finite and within [0,1], rejects hidden RGB on fully transparent source pixels, performs deterministic source-over composition through premultiplied intermediates, and guarantees fully transparent output has zero RGB. Empty layer sets, non-finite/out-of-range channels and hidden-RGB inputs fail closed. Standalone adversarial CTest regressions and sanitizer coverage exercise these contracts.
+
 ## Remaining acceptance
 
-Alpha-safe composition/no hidden-RGB leakage, seam safety without threshold weakening, topology preservation/no silent raster fallback, deterministic final output provenance, and adversarial mixed-content execution fixtures remain material acceptance items. Stage 9 is therefore not complete yet.
+Seam safety without threshold weakening, topology preservation/no silent raster fallback, deterministic final output provenance, and broader adversarial mixed-content execution fixtures remain material acceptance items. Stage 9 is therefore not complete yet.
