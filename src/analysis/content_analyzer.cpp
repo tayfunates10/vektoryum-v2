@@ -61,18 +61,23 @@ ContentAnalysis classify_features(const ContentFeatures& features) noexcept {
         return result;
     }
 
-    if (f.color_complexity >= 0.30 && f.texture_energy >= 0.08 && f.flat_region_ratio <= 0.52) {
-        result.kind = ContentKind::Photo;
-        result.route = ProcessingRoute::PhotoRestoration;
-        result.confidence = clamp01(0.48 + 0.26 * f.color_complexity + 0.26 * f.texture_energy);
-        return result;
-    }
-
+    // Mixed content deliberately takes precedence over the broad photo rule.
+    // A meaningful flat-region ratio together with edges and color complexity is
+    // the signature we use for photo+graphics/typography composites. Evaluating
+    // the photo rule first would swallow these samples and incorrectly bypass
+    // the hybrid pipeline.
     if (f.color_complexity >= 0.18 && f.edge_density >= 0.08 && f.flat_region_ratio >= 0.30) {
         result.kind = ContentKind::Mixed;
         result.route = ProcessingRoute::Hybrid;
         result.confidence = clamp01(0.46 + 0.18 * f.edge_density + 0.18 * f.color_complexity +
                                     0.18 * f.flat_region_ratio);
+        return result;
+    }
+
+    if (f.color_complexity >= 0.30 && f.texture_energy >= 0.08 && f.flat_region_ratio <= 0.52) {
+        result.kind = ContentKind::Photo;
+        result.route = ProcessingRoute::PhotoRestoration;
+        result.confidence = clamp01(0.48 + 0.26 * f.color_complexity + 0.26 * f.texture_energy);
         return result;
     }
 
