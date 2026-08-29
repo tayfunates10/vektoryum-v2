@@ -75,12 +75,13 @@ struct QualityCertificateIssueResult {
 };
 
 struct CanonicalMetricMeasurement {
-    QualityCertificateValidation validation{};
+    QualityCertificateError error{QualityCertificateError::None};
+    std::size_t metric_index{0U};
     std::uint64_t sample_count{0U};
     std::uint64_t execution_units{0U};
     std::uint64_t peak_memory_bytes{0U};
     std::vector<MetricGate> metrics;
-    [[nodiscard]] bool ok() const noexcept { return validation.ok(); }
+    [[nodiscard]] bool ok() const noexcept { return error == QualityCertificateError::None; }
 };
 
 [[nodiscard]] QualityCertificateValidation validate_quality_certificate_request(
