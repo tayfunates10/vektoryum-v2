@@ -1,3 +1,4 @@
+#include <cstdlib>
 #include <limits>
 #include <string_view>
 
@@ -7,7 +8,7 @@ namespace {
 
 int failures = 0;
 
-void expect_true(bool condition, std::string_view name) {
+void expect_true(bool condition, std::string_view) {
     if (!condition) {
         ++failures;
     }
@@ -33,66 +34,49 @@ void expect_true(bool condition, std::string_view name) {
 
 }  // namespace
 
-int run_training_run_contract_tests() {
+int main() {
     using namespace vektoryum::training;
-
     const TrainingRunManifest baseline = valid_manifest();
-    expect_true(validate_training_run_manifest(baseline).ok(),
-                "deterministic training manifest is accepted");
+    expect_true(validate_training_run_manifest(baseline).ok(), "valid manifest");
 
     TrainingRunManifest invalid = baseline;
     invalid.schema_version.clear();
-    expect_true(validate_training_run_manifest(invalid).error ==
-                    TrainingRunContractError::MissingSchemaVersion,
-                "missing schema version is rejected");
-
+    expect_true(validate_training_run_manifest(invalid).error == TrainingRunContractError::MissingSchemaVersion,
+                "missing schema");
     invalid = baseline;
     invalid.dataset_version.clear();
-    expect_true(validate_training_run_manifest(invalid).error ==
-                    TrainingRunContractError::MissingDatasetIdentity,
-                "dataset identity must include version");
-
+    expect_true(validate_training_run_manifest(invalid).error == TrainingRunContractError::MissingDatasetIdentity,
+                "dataset identity");
     invalid = baseline;
     invalid.runtime_id.clear();
-    expect_true(validate_training_run_manifest(invalid).error ==
-                    TrainingRunContractError::MissingRuntimeIdentity,
-                "runtime identity is mandatory");
-
+    expect_true(validate_training_run_manifest(invalid).error == TrainingRunContractError::MissingRuntimeIdentity,
+                "runtime identity");
     invalid = baseline;
     invalid.max_steps = 0U;
-    expect_true(validate_training_run_manifest(invalid).error ==
-                    TrainingRunContractError::ZeroMaxSteps,
-                "zero training step budget is rejected");
+    expect_true(validate_training_run_manifest(invalid).error == TrainingRunContractError::ZeroMaxSteps,
+                "zero steps");
 
     TrainingRunLimits limits;
     limits.max_steps = 999U;
-    expect_true(validate_training_run_manifest(baseline, limits).error ==
-                    TrainingRunContractError::StepBudgetExceeded,
-                "training step resource budget is fail-closed");
-
+    expect_true(validate_training_run_manifest(baseline, limits).error == TrainingRunContractError::StepBudgetExceeded,
+                "step budget");
     limits = TrainingRunLimits{};
     limits.max_batch_size = 8U;
-    expect_true(validate_training_run_manifest(baseline, limits).error ==
-                    TrainingRunContractError::BatchBudgetExceeded,
-                "batch resource budget is fail-closed");
+    expect_true(validate_training_run_manifest(baseline, limits).error == TrainingRunContractError::BatchBudgetExceeded,
+                "batch budget");
 
     invalid = baseline;
     invalid.hyperparameters[0].value = std::numeric_limits<double>::infinity();
-    expect_true(validate_training_run_manifest(invalid).error ==
-                    TrainingRunContractError::NonFiniteHyperparameterValue,
-                "non-finite hyperparameters are rejected");
-
+    expect_true(validate_training_run_manifest(invalid).error == TrainingRunContractError::NonFiniteHyperparameterValue,
+                "finite hyperparameters");
     invalid = baseline;
     invalid.hyperparameters = {{"weight_decay", 0.0001}, {"learning_rate", 0.001}};
-    expect_true(validate_training_run_manifest(invalid).error ==
-                    TrainingRunContractError::NonDeterministicHyperparameterOrder,
-                "hyperparameters require deterministic canonical ordering");
-
+    expect_true(validate_training_run_manifest(invalid).error == TrainingRunContractError::NonDeterministicHyperparameterOrder,
+                "canonical ordering");
     invalid = baseline;
     invalid.hyperparameters = {{"learning_rate", 0.001}, {"learning_rate", 0.002}};
-    expect_true(validate_training_run_manifest(invalid).error ==
-                    TrainingRunContractError::DuplicateHyperparameterName,
-                "duplicate hyperparameters are rejected");
+    expect_true(validate_training_run_manifest(invalid).error == TrainingRunContractError::DuplicateHyperparameterName,
+                "duplicate hyperparameters");
 
-    return failures;
+    return failures == 0 ? EXIT_SUCCESS : EXIT_FAILURE;
 }
