@@ -19,6 +19,9 @@ add_library(vektoryum_core STATIC
     src/ml/runtime_contract.cpp
     src/resample/resampler.cpp
     src/restoration/photo_restoration.cpp
+    src/training/benchmark_result_contract.cpp
+    src/training/dataset_contract.cpp
+    src/training/training_run_contract.cpp
     src/vector/path_quality.cpp
     src/vector/reconstruction.cpp
     src/vector/svg_path.cpp
@@ -78,15 +81,34 @@ add_executable(vektoryum_tests
     tests/test_content_analyzer.cpp
     tests/test_photo_restoration.cpp
     tests/test_ml_runtime.cpp
+    tests/test_dataset_contract.cpp
     tests/test_vector_reconstruction.cpp
     tests/test_svg_path.cpp
 )
 target_link_libraries(vektoryum_tests PRIVATE vektoryum_core)
 vektoryum_apply_warnings(vektoryum_tests)
 
+add_executable(vektoryum_training_contract_tests
+    tests/test_training_run_contract.cpp
+)
+target_link_libraries(vektoryum_training_contract_tests PRIVATE vektoryum_core)
+vektoryum_apply_warnings(vektoryum_training_contract_tests)
+
+add_executable(vektoryum_benchmark_contract_tests
+    tests/test_benchmark_result_contract.cpp
+)
+target_link_libraries(vektoryum_benchmark_contract_tests PRIVATE vektoryum_core)
+vektoryum_apply_warnings(vektoryum_benchmark_contract_tests)
+
 if(VEKTORYUM_ENABLE_SANITIZERS AND NOT MSVC)
     target_compile_options(vektoryum_tests PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
     target_link_options(vektoryum_tests PRIVATE -fsanitize=address,undefined)
+    target_compile_options(vektoryum_training_contract_tests PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+    target_link_options(vektoryum_training_contract_tests PRIVATE -fsanitize=address,undefined)
+    target_compile_options(vektoryum_benchmark_contract_tests PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+    target_link_options(vektoryum_benchmark_contract_tests PRIVATE -fsanitize=address,undefined)
 endif()
 
 add_test(NAME vektoryum.unit COMMAND vektoryum_tests)
+add_test(NAME vektoryum.training_contract COMMAND vektoryum_training_contract_tests)
+add_test(NAME vektoryum.benchmark_contract COMMAND vektoryum_benchmark_contract_tests)
