@@ -2,7 +2,7 @@
 
 Weight: **7%**
 
-Status: active foundation; do not count this stage complete until implementation, adversarial regressions, exact-head CI, clean mergeability and zero blocking review threads satisfy every acceptance item.
+Status: active; do not count this stage complete until implementation, adversarial regressions, exact-head CI, clean mergeability and zero blocking review threads satisfy every acceptance item.
 
 ## Required contracts
 
@@ -19,6 +19,12 @@ Status: active foundation; do not count this stage complete until implementation
 - Adversarial mixed-content fixtures for ordering, overlaps, alpha boundaries, tiny vector features, high-frequency raster detail, resource overflow and malformed hybrid plans.
 - Existing source hygiene, Ubuntu, Windows, macOS and Linux ASan/UBSan gates remain mandatory.
 
-## First implementation slice
+## Implemented slices
 
-The initial contract validates schema/plan identity, bounded dimensions and contribution count, unique contribution identities, canonical z-order, finite coverage/opacity ranges, and presence of both vector and raster contributions. This is foundation only and does not complete Stage 9.
+The planning contract validates schema/plan identity, bounded dimensions and contribution count, unique contribution identities, canonical z-order, finite coverage/opacity ranges, and presence of both vector and raster contributions.
+
+The routing/provenance contract adds deterministic content-class routing: geometry is vector-owned and photographic detail is raster-owned. Every contribution must carry an immutable source identity, source revision and canonical lowercase SHA-256 digest. Aggregate intermediate-memory and execution-unit accounting is overflow-safe and bounded. Missing provenance, route/kind mismatches, zero resource declarations and aggregate budget overflow all fail closed with adversarial regressions.
+
+## Remaining acceptance
+
+Alpha-safe composition/no hidden-RGB leakage, seam safety without threshold weakening, topology preservation/no silent raster fallback, deterministic final output provenance, and adversarial mixed-content execution fixtures remain material acceptance items. Stage 9 is therefore not complete yet.
