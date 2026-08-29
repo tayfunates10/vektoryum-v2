@@ -28,6 +28,8 @@ enum class RuntimeError : std::uint8_t {
     InvalidPostprocessRange,
     NonFiniteTensorData,
     UnsupportedExecution,
+    EmptyModelArtifact,
+    ModelArtifactBudgetExceeded,
 };
 
 enum class ExecutionProvider : std::uint8_t {
@@ -57,6 +59,7 @@ struct ModelDescriptor {
 struct RuntimeLimits {
     std::uint64_t max_tensor_elements{64ULL * 1024ULL * 1024ULL};
     std::uint8_t max_tensor_rank{8U};
+    std::uint64_t max_model_artifact_bytes{64ULL * 1024ULL * 1024ULL};
 };
 
 struct RuntimeBinding {
@@ -149,7 +152,10 @@ struct InferenceResult {
 
 class DeterministicReferenceRuntime {
 public:
-    [[nodiscard]] RuntimeError load(const ModelLoadReceipt& receipt) noexcept;
+    [[nodiscard]] RuntimeError load(
+        const ModelLoadReceipt& receipt,
+        const std::vector<std::uint8_t>& artifact,
+        RuntimeLimits limits = {});
     void unload() noexcept;
     [[nodiscard]] bool loaded() const noexcept;
 
@@ -160,6 +166,7 @@ public:
 
 private:
     ModelLoadReceipt loaded_model_{};
+    std::vector<std::uint8_t> loaded_artifact_{};
 };
 
 }  // namespace vektoryum::ml
