@@ -5,6 +5,8 @@
 #include <string>
 #include <vector>
 
+#include "vektoryum/export/export_artifact_contract.hpp"
+
 namespace vektoryum::certification {
 
 struct MetricGate {
@@ -33,6 +35,9 @@ struct QualityCertificateLimits {
 
 enum class QualityCertificateError : std::uint8_t {
     None,
+    InvalidExportArtifact,
+    InputProvenanceMismatch,
+    OutputProvenanceMismatch,
     MissingIdentity,
     InvalidDigest,
     MissingToolchainRevision,
@@ -56,7 +61,12 @@ struct QualityCertificateValidation {
 
 [[nodiscard]] QualityCertificateValidation validate_quality_certificate_request(
     const QualityCertificateRequest& request,
-    const QualityCertificateLimits& limits = {});
+    const exporting::ExportRequest& export_request,
+    const hybrid::HybridOutputManifest& source_output,
+    const exporting::EncodedExportArtifact& export_artifact,
+    const QualityCertificateLimits& limits = {},
+    const exporting::ExportLimits& export_limits = {},
+    const exporting::ExportExecutionLimits& export_execution_limits = {});
 [[nodiscard]] std::string canonical_quality_certificate_report(const QualityCertificateRequest& request);
 
 }  // namespace vektoryum::certification
