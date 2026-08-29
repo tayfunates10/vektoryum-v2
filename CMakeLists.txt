@@ -15,6 +15,7 @@ add_library(vektoryum_core STATIC
     src/core/image.cpp
     src/core/tile.cpp
     src/io/limits.cpp
+    src/ml/artifact_digest.cpp
     src/ml/runtime_contract.cpp
     src/resample/resampler.cpp
     src/restoration/photo_restoration.cpp
