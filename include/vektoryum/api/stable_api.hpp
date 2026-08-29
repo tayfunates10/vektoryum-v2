@@ -19,7 +19,8 @@ enum class ExitCode : int {
 };
 
 enum class Operation : std::uint8_t {
-    Version = 0,
+    Unspecified = 0,
+    Version = 1,
 };
 
 struct RequestLimits {
@@ -29,7 +30,7 @@ struct RequestLimits {
 struct RequestEnvelope {
     std::string schema_version;
     std::string request_id;
-    Operation operation{Operation::Version};
+    Operation operation{Operation::Unspecified};
 };
 
 enum class RequestError : std::uint8_t {
