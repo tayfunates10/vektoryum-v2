@@ -19,6 +19,9 @@ enum class RuntimeError : std::uint8_t {
     SilentFallback,
     NonDeterministicProvider,
     InvalidOutputTensor,
+    ArtifactDigestMismatch,
+    ModelNotLoaded,
+    TensorElementCountMismatch,
 };
 
 enum class ExecutionProvider : std::uint8_t {
@@ -59,6 +62,20 @@ struct ExecutionContract {
     RuntimeBinding binding{};
 };
 
+struct ModelLoadReceipt {
+    ModelDescriptor model{};
+    RuntimeBinding binding{};
+    std::string loaded_artifact_sha256{};
+    bool loaded{false};
+};
+
+struct InferenceRequest {
+    ExecutionContract contract{};
+    ModelLoadReceipt loaded_model{};
+    std::uint64_t input_element_count{0U};
+    std::uint64_t output_element_capacity{0U};
+};
+
 struct ContractValidation {
     RuntimeError error{RuntimeError::None};
     std::uint64_t tensor_elements{0U};
@@ -81,6 +98,20 @@ struct ContractValidation {
 // backend/provider changes explicit instead of silently degrading execution.
 [[nodiscard]] ContractValidation validate_execution_contract(
     const ExecutionContract& contract,
+    RuntimeLimits limits = {}) noexcept;
+
+// Validates a concrete model-load receipt against declared provenance and the
+// exact backend/provider binding used to load it. The runtime never treats an
+// unverified or fallback-loaded artifact as production-ready.
+[[nodiscard]] ContractValidation validate_model_load(
+    const ModelLoadReceipt& receipt) noexcept;
+
+// Validates the boundary immediately before inference: the loaded model must
+// exactly match the execution contract, and caller-provided tensor storage must
+// match the certified input/output element counts. No allocation or provider
+// substitution is performed here.
+[[nodiscard]] ContractValidation validate_inference_request(
+    const InferenceRequest& request,
     RuntimeLimits limits = {}) noexcept;
 
 }  // namespace vektoryum::ml
