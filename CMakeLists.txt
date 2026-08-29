@@ -11,6 +11,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 add_library(vektoryum_core STATIC
     src/analysis/content_analyzer.cpp
+    src/certification/quality_certificate.cpp
     src/core/color.cpp
     src/core/image.cpp
     src/core/tile.cpp
@@ -114,6 +115,10 @@ add_executable(vektoryum_export_destination_contract_tests tests/test_export_des
 target_link_libraries(vektoryum_export_destination_contract_tests PRIVATE vektoryum_core)
 vektoryum_apply_warnings(vektoryum_export_destination_contract_tests)
 
+add_executable(vektoryum_quality_certificate_tests tests/test_quality_certificate.cpp)
+target_link_libraries(vektoryum_quality_certificate_tests PRIVATE vektoryum_core)
+vektoryum_apply_warnings(vektoryum_quality_certificate_tests)
+
 if(VEKTORYUM_ENABLE_SANITIZERS AND NOT MSVC)
     foreach(target
         vektoryum_tests
@@ -126,7 +131,8 @@ if(VEKTORYUM_ENABLE_SANITIZERS AND NOT MSVC)
         vektoryum_export_contract_tests
         vektoryum_export_artifact_contract_tests
         vektoryum_canonical_encoder_tests
-        vektoryum_export_destination_contract_tests)
+        vektoryum_export_destination_contract_tests
+        vektoryum_quality_certificate_tests)
         target_compile_options(${target} PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
         target_link_options(${target} PRIVATE -fsanitize=address,undefined)
     endforeach()
@@ -143,3 +149,4 @@ add_test(NAME vektoryum.export_contract COMMAND vektoryum_export_contract_tests)
 add_test(NAME vektoryum.export_artifact_contract COMMAND vektoryum_export_artifact_contract_tests)
 add_test(NAME vektoryum.canonical_encoder COMMAND vektoryum_canonical_encoder_tests)
 add_test(NAME vektoryum.export_destination_contract COMMAND vektoryum_export_destination_contract_tests)
+add_test(NAME vektoryum.quality_certificate COMMAND vektoryum_quality_certificate_tests)
