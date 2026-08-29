@@ -22,6 +22,10 @@ namespace {
     return true;
 }
 
+[[nodiscard]] bool safe_report_field(const std::string& value) noexcept {
+    return value.find('\n') == std::string::npos && value.find('\r') == std::string::npos;
+}
+
 [[nodiscard]] bool supported_format(ExportFormat format) noexcept {
     switch (format) {
         case ExportFormat::Svg:
@@ -45,12 +49,19 @@ namespace {
 
 }  // namespace
 
-ExportRequestValidation validate_export_request(const ExportRequest& request, const ExportLimits& limits) {
+ExportRequestValidation validate_export_request(
+    const ExportRequest& request,
+    const hybrid::HybridOutputManifest& source_output,
+    const ExportLimits& limits) {
     if (request.schema_version.empty()) {
         return {ExportRequestError::MissingSchemaVersion, 0U};
     }
     if (request.export_id.empty()) {
         return {ExportRequestError::MissingExportIdentity, 0U};
+    }
+    if (!safe_report_field(request.schema_version) || !safe_report_field(request.export_id) ||
+        !safe_report_field(request.source_output_id)) {
+        return {ExportRequestError::UnsafeTextField, 0U};
     }
     if (!supported_format(request.format)) {
         return {ExportRequestError::UnsupportedFormat, 0U};
@@ -60,6 +71,12 @@ ExportRequestValidation validate_export_request(const ExportRequest& request, co
     }
     if (!is_lower_hex_sha256(request.source_output_sha256)) {
         return {ExportRequestError::InvalidSourceOutputDigest, 0U};
+    }
+    if (request.source_output_id != source_output.output_id) {
+        return {ExportRequestError::SourceOutputIdentityMismatch, 0U};
+    }
+    if (request.source_output_sha256 != source_output.output_sha256) {
+        return {ExportRequestError::SourceOutputDigestMismatch, 0U};
     }
     if (request.width == 0U || request.height == 0U) {
         return {ExportRequestError::ZeroDimension, 0U};
