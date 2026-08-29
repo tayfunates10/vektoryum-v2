@@ -7,6 +7,7 @@
 #include <utility>
 
 #include "vektoryum/export/canonical_encoder.hpp"
+#include "vektoryum/ml/artifact_digest.hpp"
 
 namespace {
 
@@ -14,6 +15,7 @@ using vektoryum::certification::MetricGate;
 using vektoryum::certification::QualityCertificateError;
 using vektoryum::certification::QualityCertificateRequest;
 using vektoryum::certification::canonical_quality_certificate_report;
+using vektoryum::certification::issue_quality_certificate;
 using vektoryum::certification::validate_quality_certificate_request;
 using vektoryum::exporting::EncodedExportArtifact;
 using vektoryum::exporting::ExportFormat;
@@ -88,10 +90,37 @@ int main() {
         return EXIT_FAILURE;
     }
 
+    const auto issued_a = issue_quality_certificate(request, export_request_value, source, artifact);
+    const auto issued_b = issue_quality_certificate(request, export_request_value, source, artifact);
+    if (!issued_a.ok() || !issued_b.ok()) {
+        std::cerr << "valid certificate issuance failed\n";
+        return EXIT_FAILURE;
+    }
+    if (issued_a.artifact.canonical_bytes != issued_b.artifact.canonical_bytes ||
+        issued_a.artifact.certificate_sha256 != issued_b.artifact.certificate_sha256) {
+        std::cerr << "certificate artifact is not deterministic\n";
+        return EXIT_FAILURE;
+    }
+    if (issued_a.artifact.certificate_id != request.certificate_id ||
+        issued_a.artifact.input_sha256 != request.input_sha256 ||
+        issued_a.artifact.output_sha256 != request.output_sha256 ||
+        issued_a.artifact.toolchain_revision != request.toolchain_revision) {
+        std::cerr << "certificate artifact lost provenance\n";
+        return EXIT_FAILURE;
+    }
+    if (vektoryum::ml::sha256_hex(issued_a.artifact.canonical_bytes) != issued_a.artifact.certificate_sha256) {
+        std::cerr << "certificate artifact digest does not bind canonical bytes\n";
+        return EXIT_FAILURE;
+    }
+
     auto substituted_input = request;
     substituted_input.input_sha256 = std::string(64U, 'b');
     if (validate(substituted_input).error != QualityCertificateError::InputProvenanceMismatch) {
         std::cerr << "Stage 10 source provenance substitution accepted\n";
+        return EXIT_FAILURE;
+    }
+    if (issue_quality_certificate(substituted_input, export_request_value, source, artifact).ok()) {
+        std::cerr << "invalid provenance issued a certificate artifact\n";
         return EXIT_FAILURE;
     }
 
