@@ -10,6 +10,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 add_library(vektoryum_core STATIC
+    src/analysis/content_analyzer.cpp
     src/core/color.cpp
     src/core/image.cpp
     src/core/tile.cpp
@@ -68,6 +69,7 @@ enable_testing()
 add_executable(vektoryum_tests
     tests/test_main.cpp
     tests/test_resampler.cpp
+    tests/test_content_analyzer.cpp
 )
 target_link_libraries(vektoryum_tests PRIVATE vektoryum_core)
 vektoryum_apply_warnings(vektoryum_tests)
