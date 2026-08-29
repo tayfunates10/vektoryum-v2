@@ -8,7 +8,10 @@ using vektoryum::api::Operation;
 using vektoryum::api::RequestEnvelope;
 using vektoryum::api::RequestError;
 using vektoryum::api::RequestLimits;
+using vektoryum::api::ResponseEnvelope;
+using vektoryum::api::ResponseStatus;
 using vektoryum::api::canonical_request_report;
+using vektoryum::api::canonical_response_report;
 using vektoryum::api::stable_api_major;
 using vektoryum::api::stable_api_minor;
 using vektoryum::api::stable_schema_version;
@@ -46,6 +49,41 @@ int main() {
            "schema_version=vektoryum.core-api.v1\n"
            "request_id=request-0001\n"
            "operation=version\n");
+
+    const ResponseEnvelope success{
+        std::string(stable_schema_version),
+        baseline.request_id,
+        Operation::Version,
+        ResponseStatus::Success,
+        ExitCode::Success,
+        RequestError::None,
+    };
+    const std::string success_a = canonical_response_report(success);
+    const std::string success_b = canonical_response_report(success);
+    assert(success_a == success_b);
+    assert(success_a ==
+           "schema_version=vektoryum.core-api.v1\n"
+           "request_id=request-0001\n"
+           "operation=version\n"
+           "status=success\n"
+           "exit_code=0\n"
+           "error=none\n");
+
+    const ResponseEnvelope failure{
+        std::string(stable_schema_version),
+        baseline.request_id,
+        Operation::Version,
+        ResponseStatus::Error,
+        ExitCode::Data,
+        RequestError::UnsupportedSchema,
+    };
+    assert(canonical_response_report(failure) ==
+           "schema_version=vektoryum.core-api.v1\n"
+           "request_id=request-0001\n"
+           "operation=version\n"
+           "status=error\n"
+           "exit_code=65\n"
+           "error=unsupported_schema\n");
 
     RequestEnvelope invalid = baseline;
     invalid.schema_version = "vektoryum.core-api.v2";
