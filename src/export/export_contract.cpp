@@ -1,7 +1,5 @@
 #include "vektoryum/export/export_contract.hpp"
 
-#include <array>
-#include <cctype>
 #include <limits>
 #include <sstream>
 
@@ -13,7 +11,8 @@ namespace {
     if (value.size() != 64U) {
         return false;
     }
-    for (const unsigned char c : value) {
+    for (const char character : value) {
+        const auto c = static_cast<unsigned char>(character);
         const bool digit = c >= static_cast<unsigned char>('0') && c <= static_cast<unsigned char>('9');
         const bool lower_hex = c >= static_cast<unsigned char>('a') && c <= static_cast<unsigned char>('f');
         if (!digit && !lower_hex) {
