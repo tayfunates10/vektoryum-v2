@@ -1,5 +1,6 @@
 #include <cstdint>
 #include <iostream>
+#include <limits>
 #include <string_view>
 #include <vector>
 
@@ -40,11 +41,7 @@ int run_vector_reconstruction_tests() {
             donut[static_cast<std::size_t>(y) * 7U + x] = 255U;
         }
     }
-    for (std::uint32_t y = 3U; y < 4U; ++y) {
-        for (std::uint32_t x = 3U; x < 4U; ++x) {
-            donut[static_cast<std::size_t>(y) * 7U + x] = 0U;
-        }
-    }
+    donut[3U * 7U + 3U] = 0U;
     const auto ring = reconstruct_binary_mask(donut, 7U, 7U);
     expect_true(ring.ok(), "donut contour reconstruction succeeds");
     expect_true(ring.scene.paths.size() == 2U, "donut preserves outer and hole contours");
@@ -68,6 +65,20 @@ int run_vector_reconstruction_tests() {
     expect_true(reconstruct_binary_mask(std::span<const std::uint8_t>(rectangle.data(), rectangle.size() - 1U),
                                         6U, 5U).error == ReconstructionError::SizeMismatch,
                 "mask size mismatch is rejected");
+
+    const std::vector<std::uint8_t> empty(4U, 0U);
+    expect_true(reconstruct_binary_mask(empty, 2U, 2U).error == ReconstructionError::NoForeground,
+                "empty foreground fails closed");
+
+    const std::vector<std::uint8_t> diagonal{255U, 0U, 0U, 255U};
+    expect_true(reconstruct_binary_mask(diagonal, 2U, 2U).error == ReconstructionError::TopologyAmbiguity,
+                "diagonal-only touching components fail closed as topology ambiguity");
+
+    const std::span<const std::uint8_t> none{};
+    expect_true(reconstruct_binary_mask(
+                    none, std::numeric_limits<std::uint32_t>::max(), 1U).error ==
+                    ReconstructionError::CoordinateOverflow,
+                "coordinates beyond signed geometry range are rejected before tracing");
 
     return failures;
 }
