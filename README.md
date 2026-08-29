@@ -1,7 +1,7 @@
 # Vektoryum v2
 
-> **Durum:** Core Engine geliştirme aşaması 0/13 tamamlandı — **%4**  
-> **Aktif aşama:** Aşama 1 — Repository Foundation & CI  
+> **Durum:** Core Engine geliştirme aşaması 0/13 tamamlandı — **%4**
+> **Aktif aşama:** Aşama 1 — Repository Foundation & CI
 > **Çalışma modeli:** Branch → Pull Request → test/CI → yalnızca yeşilse `main` merge → sonraki aşama
 
 Vektoryum v2; logo, çizim, ikon, illüstrasyon, ekran grafiği ve fotoğraf gibi farklı raster görselleri içerik türüne göre analiz eden; mümkün olan en yüksek algısal ve geometrik sadakatle büyüten, gerektiğinde yeniden yapılandıran ve vektörleştirilebilir içerikleri gerçek vektör geometrisine dönüştüren profesyonel bir görüntü işleme motorudur.
