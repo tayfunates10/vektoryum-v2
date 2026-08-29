@@ -1,9 +1,9 @@
 #include "vektoryum/certification/quality_certificate.hpp"
 
-#include <cmath>
 #include <cstdlib>
 #include <iostream>
 #include <limits>
+#include <utility>
 
 namespace {
 
@@ -42,7 +42,7 @@ int main() {
         return EXIT_FAILURE;
     }
 
-    auto repeated = vektoryum::certification::canonical_quality_certificate_report(request);
+    const auto repeated = vektoryum::certification::canonical_quality_certificate_report(request);
     if (repeated != vektoryum::certification::canonical_quality_certificate_report(request)) {
         std::cerr << "canonical certificate report is not deterministic\n";
         return EXIT_FAILURE;
