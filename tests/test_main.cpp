@@ -15,6 +15,7 @@
 int run_resampler_tests();
 int run_content_analyzer_tests();
 int run_photo_restoration_tests();
+int run_ml_runtime_tests();
 int run_vector_reconstruction_tests();
 int run_svg_path_tests();
 
@@ -148,6 +149,7 @@ int main() {
     failures += run_resampler_tests();
     failures += run_content_analyzer_tests();
     failures += run_photo_restoration_tests();
+    failures += run_ml_runtime_tests();
     failures += run_vector_reconstruction_tests();
     failures += run_svg_path_tests();
 
