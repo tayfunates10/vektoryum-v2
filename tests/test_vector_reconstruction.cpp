@@ -4,6 +4,7 @@
 #include <string_view>
 #include <vector>
 
+#include "vektoryum/vector/path_quality.hpp"
 #include "vektoryum/vector/reconstruction.hpp"
 
 namespace {
@@ -35,6 +36,11 @@ int run_vector_reconstruction_tests() {
     const auto rect_raster = rasterize_even_odd(rect.scene, 6U, 5U);
     expect_true(binary_iou(rectangle, rect_raster) == 1.0, "rectangle rasterize-back IoU is exact");
 
+    const auto rect_quality = certify_scene(rect.scene, rectangle, 6U, 5U);
+    expect_true(rect_quality.passed() && rect_quality.raster_iou == 1.0 &&
+                    rect_quality.disagreement_ratio == 0.0 && rect_quality.self_intersections == 0U,
+                "rectangle passes vector fidelity certification");
+
     std::vector<std::uint8_t> donut(7U * 7U, 0U);
     for (std::uint32_t y = 1U; y < 6U; ++y) {
         for (std::uint32_t x = 1U; x < 6U; ++x) {
@@ -47,6 +53,8 @@ int run_vector_reconstruction_tests() {
     expect_true(ring.scene.paths.size() == 2U, "donut preserves outer and hole contours");
     const auto donut_raster = rasterize_even_odd(ring.scene, 7U, 7U);
     expect_true(binary_iou(donut, donut_raster) == 1.0, "donut rasterize-back IoU is exact");
+    expect_true(certify_scene(ring.scene, donut, 7U, 7U).passed(),
+                "hole topology passes fidelity and self-intersection certification");
 
     const auto deterministic_a = reconstruct_binary_mask(donut, 7U, 7U);
     const auto deterministic_b = reconstruct_binary_mask(donut, 7U, 7U);
@@ -74,6 +82,56 @@ int run_vector_reconstruction_tests() {
     expect_true(reconstruct_binary_mask(checkerboard, 64U, 64U, adversarial_budget).error ==
                     ReconstructionError::NodeBudgetExceeded,
                 "adversarial boundary extraction respects node budget immediately");
+
+    VectorScene bow_tie{};
+    bow_tie.width = 4U;
+    bow_tie.height = 4U;
+    Path crossing{};
+    crossing.points = {{0, 0}, {4, 4}, {0, 4}, {4, 0}};
+    bow_tie.paths.push_back(crossing);
+    expect_true(path_has_self_intersection(bow_tie.paths[0]),
+                "crossing polygon is detected as self-intersecting");
+    const std::vector<std::uint8_t> bow_reference(16U, 0U);
+    expect_true(certify_scene(bow_tie, bow_reference, 4U, 4U).error == PathQualityError::SelfIntersection,
+                "self-intersecting scene fails certification before fidelity acceptance");
+
+    VectorScene stepped{};
+    stepped.width = 6U;
+    stepped.height = 5U;
+    Path stepped_path{};
+    stepped_path.points = {{2, 1}, {5, 1}, {5, 4}, {4, 4}, {4, 3}, {2, 3}};
+    stepped.paths.push_back(stepped_path);
+    const auto stepped_mask = rasterize_even_odd(stepped, 6U, 5U);
+    PathQualityOptions permissive{};
+    permissive.min_iou = 0.80;
+    permissive.max_disagreement_ratio = 0.20;
+    const auto simplified = simplify_scene_fidelity_gated(stepped, stepped_mask, 6U, 5U, permissive);
+    expect_true(simplified.ok() && simplified.removed_nodes > 0U &&
+                    simplified.quality.raster_iou >= permissive.min_iou &&
+                    simplified.quality.disagreement_ratio <= permissive.max_disagreement_ratio,
+                "path simplification removes nodes only while fidelity gates remain satisfied");
+    expect_true(!path_has_self_intersection(simplified.scene.paths[0]),
+                "fidelity-gated simplification cannot introduce self intersections");
+
+    PathQualityOptions exact_gate{};
+    exact_gate.min_iou = 1.0;
+    exact_gate.max_disagreement_ratio = 0.0;
+    const auto exact_simplified = simplify_scene_fidelity_gated(rect.scene, rectangle, 6U, 5U, exact_gate);
+    expect_true(exact_simplified.ok() && exact_simplified.removed_nodes == 0U &&
+                    exact_simplified.scene.paths[0].points.size() == 4U,
+                "exact fidelity gate preserves irreducible rectangle corners");
+
+    PathQualityOptions cert_budget{};
+    cert_budget.max_certification_pixels = 8U;
+    expect_true(certify_scene(rect.scene, rectangle, 6U, 5U, cert_budget).error ==
+                    PathQualityError::CertificationBudgetExceeded,
+                "rasterize-back certification obeys explicit pixel budget");
+
+    PathQualityOptions node_quality_budget{};
+    node_quality_budget.max_nodes = 3U;
+    expect_true(certify_scene(rect.scene, rectangle, 6U, 5U, node_quality_budget).error ==
+                    PathQualityError::InvalidScene,
+                "quality certification enforces total node complexity budget");
 
     expect_true(reconstruct_binary_mask(rectangle, 0U, 5U).error == ReconstructionError::ZeroDimension,
                 "zero dimensions are rejected");
