@@ -19,8 +19,12 @@ struct TrainingRunManifest {
     std::string dataset_version;
     std::string model_id;
     std::string model_version;
+    std::string architecture_revision;
+    std::string training_code_revision;
+    std::string degradation_pipeline_revision;
     std::string runtime_id;
     std::string runtime_version;
+    std::string artifact_sha256;
     std::uint64_t seed{0U};
     std::uint64_t max_steps{0U};
     std::uint32_t batch_size{0U};
@@ -39,7 +43,12 @@ enum class TrainingRunContractError : std::uint8_t {
     MissingRunIdentity,
     MissingDatasetIdentity,
     MissingModelIdentity,
+    MissingArchitectureRevision,
+    MissingTrainingCodeRevision,
+    MissingDegradationPipelineRevision,
     MissingRuntimeIdentity,
+    MissingArtifactChecksum,
+    InvalidArtifactChecksum,
     ZeroMaxSteps,
     StepBudgetExceeded,
     ZeroBatchSize,
