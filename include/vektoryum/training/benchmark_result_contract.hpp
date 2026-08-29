@@ -25,6 +25,10 @@ struct BenchmarkResultManifest {
     std::string dataset_version;
     std::string model_id;
     std::string model_version;
+    std::string architecture_revision;
+    std::string training_code_revision;
+    std::string degradation_pipeline_revision;
+    std::string training_artifact_sha256;
     std::string runtime_id;
     std::string runtime_version;
     std::uint64_t seed{0U};
@@ -46,6 +50,11 @@ enum class BenchmarkResultError : std::uint8_t {
     MissingRunIdentity,
     MissingDatasetIdentity,
     MissingModelIdentity,
+    MissingArchitectureRevision,
+    MissingTrainingCodeRevision,
+    MissingDegradationPipelineRevision,
+    MissingTrainingArtifactChecksum,
+    InvalidTrainingArtifactChecksum,
     MissingRuntimeIdentity,
     ZeroEvaluatedSamples,
     SampleBudgetExceeded,
