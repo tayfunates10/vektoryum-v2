@@ -59,6 +59,21 @@ struct QualityCertificateValidation {
     [[nodiscard]] bool ok() const noexcept { return error == QualityCertificateError::None; }
 };
 
+struct QualityCertificateArtifact {
+    std::string certificate_id;
+    std::string input_sha256;
+    std::string output_sha256;
+    std::string toolchain_revision;
+    std::vector<std::uint8_t> canonical_bytes;
+    std::string certificate_sha256;
+};
+
+struct QualityCertificateIssueResult {
+    QualityCertificateValidation validation{};
+    QualityCertificateArtifact artifact{};
+    [[nodiscard]] bool ok() const noexcept { return validation.ok(); }
+};
+
 [[nodiscard]] QualityCertificateValidation validate_quality_certificate_request(
     const QualityCertificateRequest& request,
     const exporting::ExportRequest& export_request,
@@ -68,5 +83,13 @@ struct QualityCertificateValidation {
     const exporting::ExportLimits& export_limits = {},
     const exporting::ExportExecutionLimits& export_execution_limits = {});
 [[nodiscard]] std::string canonical_quality_certificate_report(const QualityCertificateRequest& request);
+[[nodiscard]] QualityCertificateIssueResult issue_quality_certificate(
+    const QualityCertificateRequest& request,
+    const exporting::ExportRequest& export_request,
+    const hybrid::HybridOutputManifest& source_output,
+    const exporting::EncodedExportArtifact& export_artifact,
+    const QualityCertificateLimits& limits = {},
+    const exporting::ExportLimits& export_limits = {},
+    const exporting::ExportExecutionLimits& export_execution_limits = {});
 
 }  // namespace vektoryum::certification
