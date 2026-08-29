@@ -6,6 +6,8 @@
 #include <cstddef>
 #include <limits>
 
+#include "vektoryum/ml/artifact_digest.hpp"
+
 namespace vektoryum::ml {
 namespace {
 
@@ -285,6 +287,9 @@ RuntimeError DeterministicReferenceRuntime::load(
     if (limits.max_model_artifact_bytes == 0U ||
         static_cast<std::uint64_t>(artifact.size()) > limits.max_model_artifact_bytes) {
         return RuntimeError::ModelArtifactBudgetExceeded;
+    }
+    if (sha256_hex(artifact) != receipt.loaded_artifact_sha256) {
+        return RuntimeError::ArtifactDigestMismatch;
     }
     loaded_model_ = receipt;
     loaded_artifact_ = artifact;

@@ -25,7 +25,7 @@ int run_ml_runtime_tests() {
     const ModelDescriptor model{
         "vektoryum-sr",
         "1.0.0",
-        "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"};
+        "963dd6821d00e7ce24a4d85cf812aed4d1a35db168cf04547f49d7fbc220d854"};
     const TensorShape input{{1U, 3U, 256U, 256U}};
 
     const auto valid = validate_runtime_contract(model, input);
@@ -227,6 +227,14 @@ int run_ml_runtime_tests() {
     expect_true(!runtime.loaded(), "reference runtime starts unloaded");
     expect_true(runtime.load(load, model_artifact) == RuntimeError::None && runtime.loaded(),
                 "reference runtime owns verified loaded-model artifact state");
+
+    auto tampered_artifact = model_artifact;
+    tampered_artifact[0U] ^= 0x01U;
+    DeterministicReferenceRuntime tampered_artifact_runtime;
+    expect_true(tampered_artifact_runtime.load(load, tampered_artifact) ==
+                    RuntimeError::ArtifactDigestMismatch &&
+                    !tampered_artifact_runtime.loaded(),
+                "reference runtime recomputes SHA-256 and rejects tampered artifact bytes");
 
     DeterministicReferenceRuntime empty_artifact_runtime;
     expect_true(empty_artifact_runtime.load(load, {}) == RuntimeError::EmptyModelArtifact &&
