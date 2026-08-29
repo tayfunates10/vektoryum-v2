@@ -1,10 +1,10 @@
 # Vektoryum v2
 
-Core Engine progress: **76%**
+Core Engine progress: **83%**
 
-Completed: Stages 0, 1, 2, 3, 4, 5, 6, 7, 8.
+Completed: Stages 0, 1, 2, 3, 4, 5, 6, 7, 8, 9.
 
-Active: **Stage 9 — Hybrid reconstruction**.
+Active: **Stage 10 — Exporters**.
 
 Workflow: branch → pull request → CI → merge only after all required checks pass.
 
@@ -21,8 +21,8 @@ Workflow: branch → pull request → CI → merge only after all required check
 | 6 | Photo restoration and non-ML SR | 12% | done |
 | 7 | Vektoryum ML/DL model/runtime | 14% | done |
 | 8 | Training/data/benchmark pipeline | 7% | done |
-| 9 | Hybrid reconstruction | 7% | active |
-| 10 | Exporters | 5% | planned |
+| 9 | Hybrid reconstruction | 7% | done |
+| 10 | Exporters | 5% | active |
 | 11 | Quality/performance certification | 6% | planned |
 | 12 | Stable CLI/Core API | 3% | planned |
 | 13 | Release hardening | 3% | planned |
@@ -38,5 +38,6 @@ Workflow: branch → pull request → CI → merge only after all required check
 - 55%: Stage 6 merged in PR #7 after deterministic bounded denoise/deblock/sharpen restoration, 2x/4x project-owned non-ML super-resolution, strict validation and output budgets, premultiplied-alpha-safe processing, anti-ringing/halo/overshoot regressions, cross-platform build/tests and ASan/UBSan all passed with zero unresolved blocking review threads.
 - 69%: Stage 7 merged in PR #8 after deterministic project-owned ML/DL runtime contracts, byte-verified SHA-256 model provenance, owned bounded artifact loading, strict tensor/preprocess/postprocess interfaces, backend/provider isolation, no-silent-fallback enforcement, deterministic reference execution, adversarial invalid-model/input regressions, cross-platform build/tests and ASan/UBSan all passed with zero unresolved blocking review threads.
 - 76%: Stage 8 merged in PR #9 after deterministic dataset manifests/splits, byte-verified sample provenance, fail-closed license/rights authorization and digest-to-rights binding, leakage prevention, deterministic training/model provenance, benchmark metric/result/artifact provenance, canonical reports, bounded resources, adversarial regressions, cross-platform build/tests and ASan/UBSan all passed with zero unresolved blocking review threads.
+- 83%: Stage 9 merged in PR #11 after deterministic hybrid planning/routing, immutable vector/raster source provenance, bounded fusion resources, alpha-safe composition, seam/topology protection, no silent raster fallback, deterministic canonical output provenance, adversarial mixed-content execution coverage, cross-platform build/tests and ASan/UBSan all passed with zero unresolved blocking review threads.
 
-Next: implement Stage 9 Hybrid reconstruction with deterministic routing/fusion contracts, explicit vector/raster contribution provenance, bounded reconstruction resources, fail-closed invalid hybrid plans, seam/topology/alpha safety and cross-platform regression coverage without weakening existing quality gates.
+Next: implement Stage 10 Exporters with deterministic format contracts, bounded output resources, canonical serialization, provenance binding, fail-closed invalid export requests and cross-platform regression coverage without weakening existing quality gates.
