@@ -1,11 +1,15 @@
-if(NOT DEFINED BUILD_DIR)
-    message(FATAL_ERROR "BUILD_DIR is required")
-endif()
-
-if(WIN32)
-    set(CLI "${BUILD_DIR}/Release/vektoryum_cli.exe")
+if(DEFINED CLI_PATH)
+    set(CLI "${CLI_PATH}")
 else()
-    set(CLI "${BUILD_DIR}/vektoryum_cli")
+    if(NOT DEFINED BUILD_DIR)
+        message(FATAL_ERROR "BUILD_DIR or CLI_PATH is required")
+    endif()
+
+    if(WIN32)
+        set(CLI "${BUILD_DIR}/Release/vektoryum_cli.exe")
+    else()
+        set(CLI "${BUILD_DIR}/vektoryum_cli")
+    endif()
 endif()
 
 if(NOT EXISTS "${CLI}")
