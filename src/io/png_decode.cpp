@@ -157,7 +157,7 @@ struct DeflateHuffman {
     for (unsigned i = 0U; i < length; ++i) {
         reversed = static_cast<std::uint16_t>(
             static_cast<std::uint16_t>(reversed << 1U) |
-            static_cast<std::uint16_t>((code >> i) & 1U));
+            static_cast<std::uint16_t>((static_cast<std::uint32_t>(code) >> i) & 1U));
     }
     return reversed;
 }
