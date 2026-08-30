@@ -5,12 +5,29 @@
 #include "vektoryum/api/stable_api.hpp"
 #include "vektoryum/certification/quality_certificate.hpp"
 #include "vektoryum/export/canonical_encoder.hpp"
+#include "vektoryum/io/raster_input.hpp"
 #include "vektoryum/version.hpp"
 
 namespace {
 
 int print_version() {
     std::cout << "Vektoryum v2 core " << vektoryum::version_string() << '\n';
+    return static_cast<int>(vektoryum::api::ExitCode::Success);
+}
+
+int probe_raster_input(std::string_view path) {
+    const auto loaded = vektoryum::io::load_raster_input(std::string(path));
+    if (!loaded.ok()) {
+        std::cout << "schema_version=vektoryum.raster-input.v1\n"
+                  << "status=error\n"
+                  << "error=" << vektoryum::io::raster_input_error_name(loaded.error) << '\n';
+        return static_cast<int>(vektoryum::api::ExitCode::Data);
+    }
+
+    std::cout << "schema_version=vektoryum.raster-input.v1\n"
+              << "status=accepted\n"
+              << "format=" << vektoryum::io::raster_format_name(loaded.input.format) << '\n'
+              << "input_bytes=" << loaded.input.bytes.size() << '\n';
     return static_cast<int>(vektoryum::api::ExitCode::Success);
 }
 
@@ -95,9 +112,13 @@ int main(int argc, char** argv) {
             return print_version();
         }
         if (argument == "--help") {
-            std::cout << "usage: vektoryum_cli [--version|--help|--certified-export REQUEST_ID [CERTIFICATE_SHA256]]\n";
+            std::cout << "usage: vektoryum_cli [--version|--help|--probe-input FILE|--certified-export REQUEST_ID [CERTIFICATE_SHA256]]\n";
             return static_cast<int>(vektoryum::api::ExitCode::Success);
         }
+    }
+
+    if (argc == 3 && std::string_view{argv[1]} == "--probe-input") {
+        return probe_raster_input(argv[2]);
     }
 
     if ((argc == 3 || argc == 4) && std::string_view{argv[1]} == "--certified-export") {
