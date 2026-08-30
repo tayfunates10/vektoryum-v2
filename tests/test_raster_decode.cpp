@@ -30,6 +30,11 @@ void write_u32_le(std::vector<std::uint8_t>& bytes, std::size_t offset, std::uin
     bytes[offset + 3U] = static_cast<std::uint8_t>((value >> 24U) & 0xffU);
 }
 
+void append_u16_be(std::vector<std::uint8_t>& bytes, std::uint16_t value) {
+    bytes.push_back(static_cast<std::uint8_t>((value >> 8U) & 0xffU));
+    bytes.push_back(static_cast<std::uint8_t>(value & 0xffU));
+}
+
 void append_u32_be(std::vector<std::uint8_t>& bytes, std::uint32_t value) {
     bytes.push_back(static_cast<std::uint8_t>((value >> 24U) & 0xffU));
     bytes.push_back(static_cast<std::uint8_t>((value >> 16U) & 0xffU));
@@ -105,6 +110,56 @@ void append_png_chunk(
 
     append_png_chunk(png, {0x49U, 0x45U, 0x4eU, 0x44U}, std::span<const std::uint8_t>{});
     return png;
+}
+
+void append_jpeg_segment(
+    std::vector<std::uint8_t>& jpeg,
+    std::uint8_t marker,
+    std::span<const std::uint8_t> payload) {
+    jpeg.push_back(0xffU);
+    jpeg.push_back(marker);
+    append_u16_be(jpeg, static_cast<std::uint16_t>(payload.size() + 2U));
+    jpeg.insert(jpeg.end(), payload.begin(), payload.end());
+}
+
+[[nodiscard]] std::vector<std::uint8_t> make_grayscale_jpeg() {
+    std::vector<std::uint8_t> jpeg{0xffU, 0xd8U};
+
+    std::vector<std::uint8_t> dqt(65U, 1U);
+    dqt[0U] = 0U;
+    append_jpeg_segment(jpeg, 0xdbU, dqt);
+
+    const std::vector<std::uint8_t> sof0{
+        8U,
+        0U, 1U,
+        0U, 1U,
+        1U,
+        1U, 0x11U, 0U,
+    };
+    append_jpeg_segment(jpeg, 0xc0U, sof0);
+
+    std::vector<std::uint8_t> dc(18U, 0U);
+    dc[0U] = 0x00U;
+    dc[1U] = 1U;
+    dc[17U] = 0U;
+    append_jpeg_segment(jpeg, 0xc4U, dc);
+
+    std::vector<std::uint8_t> ac(18U, 0U);
+    ac[0U] = 0x10U;
+    ac[1U] = 1U;
+    ac[17U] = 0U;
+    append_jpeg_segment(jpeg, 0xc4U, ac);
+
+    const std::vector<std::uint8_t> sos{
+        1U,
+        1U, 0x00U,
+        0U, 63U, 0U,
+    };
+    append_jpeg_segment(jpeg, 0xdaU, sos);
+    jpeg.push_back(0x3fU);
+    jpeg.push_back(0xffU);
+    jpeg.push_back(0xd9U);
+    return jpeg;
 }
 
 void write_ifd_entry(
@@ -189,6 +244,36 @@ int main() {
             "PNG CRC substitution must fail closed");
     require(io::decode_raster(io::RasterFormat::Png, std::span<const std::uint8_t>{}).error == io::RasterDecodeError::MalformedContainer,
             "empty PNG payload must fail closed as malformed input");
+
+    const auto jpeg_bytes = make_grayscale_jpeg();
+    const io::RasterDecodeResult jpeg = io::decode_raster(io::RasterFormat::Jpeg, jpeg_bytes);
+    require(jpeg.ok(), "baseline sequential grayscale JPEG must decode");
+    require(jpeg.image.spec.width == 1U && jpeg.image.spec.height == 1U, "decoded JPEG dimensions must match SOF0");
+    require(jpeg.image.spec.layout == core::PixelLayout::RGBA && jpeg.image.spec.channel_type == core::ChannelType::UInt8,
+            "JPEG decode must normalize to canonical RGBA8");
+    require(jpeg.image.spec.transfer == core::TransferFunction::SRGB && jpeg.image.spec.alpha == core::AlphaMode::Straight,
+            "JPEG decode must expose canonical sRGB transfer and opaque straight alpha");
+    require(jpeg.image.rgba8 == std::vector<std::uint8_t>({128U, 128U, 128U, 255U}),
+            "zero-coefficient grayscale JPEG block must decode to neutral gray");
+    const io::RasterDecodeResult jpeg_repeat = io::decode_raster(io::RasterFormat::Jpeg, jpeg_bytes);
+    require(jpeg_repeat.ok() && jpeg_repeat.image.rgba8 == jpeg.image.rgba8,
+            "identical JPEG input must decode deterministically");
+
+    auto progressive = jpeg_bytes;
+    for (std::size_t i = 0U; i + 1U < progressive.size(); ++i) {
+        if (progressive[i] == 0xffU && progressive[i + 1U] == 0xc0U) {
+            progressive[i + 1U] = 0xc2U;
+            break;
+        }
+    }
+    require(io::decode_raster(io::RasterFormat::Jpeg, progressive).error == io::RasterDecodeError::UnsupportedFeature,
+            "progressive JPEG must fail closed until explicitly supported");
+
+    auto truncated_jpeg = jpeg_bytes;
+    truncated_jpeg.pop_back();
+    truncated_jpeg.pop_back();
+    require(io::decode_raster(io::RasterFormat::Jpeg, truncated_jpeg).error != io::RasterDecodeError::None,
+            "JPEG missing EOI must fail closed");
 
     const auto associated_bytes = make_rgba_tiff(1U, 1U);
     const io::RasterDecodeResult associated = io::decode_raster(io::RasterFormat::Tiff, associated_bytes);
