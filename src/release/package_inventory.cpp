@@ -1,7 +1,6 @@
 #include "vektoryum/release/package_inventory.hpp"
 
 #include <algorithm>
-#include <cctype>
 #include <cstdint>
 #include <limits>
 #include <string>
@@ -18,8 +17,7 @@ namespace {
         return false;
     }
     return std::all_of(value.begin(), value.end(), [](char ch) {
-        const unsigned char byte = static_cast<unsigned char>(ch);
-        return std::isdigit(byte) != 0 || (ch >= 'a' && ch <= 'f');
+        return (ch >= '0' && ch <= '9') || (ch >= 'a' && ch <= 'f');
     });
 }
 
