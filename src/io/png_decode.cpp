@@ -56,12 +56,275 @@ namespace {
     return (b << 16U) | a;
 }
 
-struct StoredInflateResult {
+struct InflateResult {
     RasterDecodeError error{RasterDecodeError::None};
     std::vector<std::uint8_t> bytes{};
 };
 
-[[nodiscard]] StoredInflateResult inflate_stored_zlib(
+class DeflateBitReader {
+public:
+    DeflateBitReader(std::span<const std::uint8_t> bytes, std::size_t begin, std::size_t end) noexcept
+        : bytes_(bytes), byte_offset_(begin), end_(end) {}
+
+    [[nodiscard]] bool read_bits(unsigned count, std::uint32_t& value) noexcept {
+        value = 0U;
+        for (unsigned i = 0U; i < count; ++i) {
+            if (byte_offset_ >= end_) {
+                return false;
+            }
+            const std::uint32_t bit =
+                (static_cast<std::uint32_t>(bytes_[byte_offset_]) >> bit_offset_) & 1U;
+            value |= bit << i;
+            ++bit_offset_;
+            if (bit_offset_ == 8U) {
+                bit_offset_ = 0U;
+                ++byte_offset_;
+            }
+        }
+        return true;
+    }
+
+    [[nodiscard]] bool align_to_byte() noexcept {
+        if (bit_offset_ == 0U) {
+            return true;
+        }
+        bit_offset_ = 0U;
+        ++byte_offset_;
+        return byte_offset_ <= end_;
+    }
+
+    [[nodiscard]] bool align_zero_padding() noexcept {
+        if (bit_offset_ == 0U) {
+            return true;
+        }
+        if (byte_offset_ >= end_) {
+            return false;
+        }
+        const std::uint8_t mask = static_cast<std::uint8_t>(0xffU << bit_offset_);
+        if ((bytes_[byte_offset_] & mask) != 0U) {
+            return false;
+        }
+        bit_offset_ = 0U;
+        ++byte_offset_;
+        return byte_offset_ <= end_;
+    }
+
+    [[nodiscard]] bool read_u16_le(std::uint16_t& value) noexcept {
+        if (bit_offset_ != 0U || !checked_range(byte_offset_, 2U, end_)) {
+            return false;
+        }
+        value = static_cast<std::uint16_t>(bytes_[byte_offset_]) |
+                static_cast<std::uint16_t>(static_cast<std::uint16_t>(bytes_[byte_offset_ + 1U]) << 8U);
+        byte_offset_ += 2U;
+        return true;
+    }
+
+    [[nodiscard]] bool read_bytes(std::size_t length, std::vector<std::uint8_t>& output, std::size_t output_limit) {
+        if (bit_offset_ != 0U || !checked_range(byte_offset_, length, end_)) {
+            return false;
+        }
+        if (length > output_limit - output.size()) {
+            return false;
+        }
+        output.insert(
+            output.end(),
+            bytes_.begin() + static_cast<std::ptrdiff_t>(byte_offset_),
+            bytes_.begin() + static_cast<std::ptrdiff_t>(byte_offset_ + length));
+        byte_offset_ += length;
+        return true;
+    }
+
+    [[nodiscard]] bool at_end() const noexcept {
+        return bit_offset_ == 0U && byte_offset_ == end_;
+    }
+
+private:
+    std::span<const std::uint8_t> bytes_{};
+    std::size_t byte_offset_{};
+    std::size_t end_{};
+    unsigned bit_offset_{};
+};
+
+struct DeflateHuffman {
+    std::array<std::uint16_t, 288U> reversed_codes{};
+    std::array<std::uint8_t, 288U> lengths{};
+    std::size_t symbol_count{};
+    unsigned max_bits{};
+};
+
+[[nodiscard]] std::uint16_t reverse_bits(std::uint16_t code, unsigned length) noexcept {
+    std::uint16_t reversed = 0U;
+    for (unsigned i = 0U; i < length; ++i) {
+        reversed = static_cast<std::uint16_t>(
+            static_cast<std::uint16_t>(reversed << 1U) |
+            static_cast<std::uint16_t>((code >> i) & 1U));
+    }
+    return reversed;
+}
+
+[[nodiscard]] bool build_huffman(std::span<const std::uint8_t> lengths, DeflateHuffman& table) noexcept {
+    if (lengths.empty() || lengths.size() > table.lengths.size()) {
+        return false;
+    }
+    std::array<std::uint16_t, 16U> count{};
+    std::array<std::uint16_t, 16U> next_code{};
+    for (const std::uint8_t length : lengths) {
+        if (length > 15U) {
+            return false;
+        }
+        if (length != 0U) {
+            ++count[length];
+            table.max_bits = std::max(table.max_bits, static_cast<unsigned>(length));
+        }
+    }
+    if (table.max_bits == 0U) {
+        return false;
+    }
+
+    std::uint32_t code = 0U;
+    for (unsigned bits = 1U; bits <= 15U; ++bits) {
+        code = (code + static_cast<std::uint32_t>(count[bits - 1U])) << 1U;
+        const std::uint32_t limit = 1U << bits;
+        if (code + static_cast<std::uint32_t>(count[bits]) > limit) {
+            return false;
+        }
+        next_code[bits] = static_cast<std::uint16_t>(code);
+    }
+
+    table.symbol_count = lengths.size();
+    for (std::size_t symbol = 0U; symbol < lengths.size(); ++symbol) {
+        const std::uint8_t length = lengths[symbol];
+        table.lengths[symbol] = length;
+        if (length != 0U) {
+            const std::uint16_t canonical = next_code[length]++;
+            table.reversed_codes[symbol] = reverse_bits(canonical, static_cast<unsigned>(length));
+        }
+    }
+    return true;
+}
+
+[[nodiscard]] bool decode_symbol(
+    DeflateBitReader& reader,
+    const DeflateHuffman& table,
+    std::uint16_t& symbol) noexcept {
+    std::uint32_t code = 0U;
+    for (unsigned length = 1U; length <= table.max_bits; ++length) {
+        std::uint32_t bit = 0U;
+        if (!reader.read_bits(1U, bit)) {
+            return false;
+        }
+        code |= bit << (length - 1U);
+        for (std::size_t candidate = 0U; candidate < table.symbol_count; ++candidate) {
+            if (table.lengths[candidate] == length && table.reversed_codes[candidate] == code) {
+                symbol = static_cast<std::uint16_t>(candidate);
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+[[nodiscard]] DeflateHuffman fixed_literal_table() noexcept {
+    std::array<std::uint8_t, 288U> lengths{};
+    for (std::size_t i = 0U; i <= 143U; ++i) {
+        lengths[i] = 8U;
+    }
+    for (std::size_t i = 144U; i <= 255U; ++i) {
+        lengths[i] = 9U;
+    }
+    for (std::size_t i = 256U; i <= 279U; ++i) {
+        lengths[i] = 7U;
+    }
+    for (std::size_t i = 280U; i <= 287U; ++i) {
+        lengths[i] = 8U;
+    }
+    DeflateHuffman table{};
+    (void)build_huffman(lengths, table);
+    return table;
+}
+
+[[nodiscard]] DeflateHuffman fixed_distance_table() noexcept {
+    std::array<std::uint8_t, 32U> lengths{};
+    lengths.fill(5U);
+    DeflateHuffman table{};
+    (void)build_huffman(lengths, table);
+    return table;
+}
+
+[[nodiscard]] RasterDecodeError decode_fixed_block(
+    DeflateBitReader& reader,
+    std::vector<std::uint8_t>& output,
+    std::size_t output_limit) {
+    static const DeflateHuffman literals = fixed_literal_table();
+    static const DeflateHuffman distances = fixed_distance_table();
+    constexpr std::array<std::uint16_t, 29U> length_base{
+        3U, 4U, 5U, 6U, 7U, 8U, 9U, 10U, 11U, 13U, 15U, 17U, 19U, 23U, 27U,
+        31U, 35U, 43U, 51U, 59U, 67U, 83U, 99U, 115U, 131U, 163U, 195U, 227U, 258U};
+    constexpr std::array<std::uint8_t, 29U> length_extra{
+        0U, 0U, 0U, 0U, 0U, 0U, 0U, 0U, 1U, 1U, 1U, 1U, 2U, 2U, 2U,
+        2U, 3U, 3U, 3U, 3U, 4U, 4U, 4U, 4U, 5U, 5U, 5U, 5U, 0U};
+    constexpr std::array<std::uint16_t, 30U> distance_base{
+        1U, 2U, 3U, 4U, 5U, 7U, 9U, 13U, 17U, 25U, 33U, 49U, 65U, 97U, 129U,
+        193U, 257U, 385U, 513U, 769U, 1025U, 1537U, 2049U, 3073U, 4097U, 6145U,
+        8193U, 12289U, 16385U, 24577U};
+    constexpr std::array<std::uint8_t, 30U> distance_extra{
+        0U, 0U, 0U, 0U, 1U, 1U, 2U, 2U, 3U, 3U, 4U, 4U, 5U, 5U, 6U,
+        6U, 7U, 7U, 8U, 8U, 9U, 9U, 10U, 10U, 11U, 11U, 12U, 12U, 13U, 13U};
+
+    for (;;) {
+        std::uint16_t symbol = 0U;
+        if (!decode_symbol(reader, literals, symbol)) {
+            return RasterDecodeError::TruncatedPixelData;
+        }
+        if (symbol < 256U) {
+            if (output.size() >= output_limit) {
+                return RasterDecodeError::PixelBudgetExceeded;
+            }
+            output.push_back(static_cast<std::uint8_t>(symbol));
+            continue;
+        }
+        if (symbol == 256U) {
+            return RasterDecodeError::None;
+        }
+        if (symbol < 257U || symbol > 285U) {
+            return RasterDecodeError::MalformedContainer;
+        }
+
+        const std::size_t length_index = static_cast<std::size_t>(symbol - 257U);
+        std::uint32_t extra_length = 0U;
+        if (!reader.read_bits(length_extra[length_index], extra_length)) {
+            return RasterDecodeError::TruncatedPixelData;
+        }
+        const std::size_t match_length =
+            static_cast<std::size_t>(length_base[length_index]) + static_cast<std::size_t>(extra_length);
+
+        std::uint16_t distance_symbol = 0U;
+        if (!decode_symbol(reader, distances, distance_symbol)) {
+            return RasterDecodeError::TruncatedPixelData;
+        }
+        if (distance_symbol >= distance_base.size()) {
+            return RasterDecodeError::MalformedContainer;
+        }
+        std::uint32_t extra_distance = 0U;
+        const std::size_t distance_index = static_cast<std::size_t>(distance_symbol);
+        if (!reader.read_bits(distance_extra[distance_index], extra_distance)) {
+            return RasterDecodeError::TruncatedPixelData;
+        }
+        const std::size_t distance =
+            static_cast<std::size_t>(distance_base[distance_index]) + static_cast<std::size_t>(extra_distance);
+        if (distance == 0U || distance > output.size()) {
+            return RasterDecodeError::MalformedContainer;
+        }
+        if (match_length > output_limit - output.size()) {
+            return RasterDecodeError::PixelBudgetExceeded;
+        }
+        for (std::size_t i = 0U; i < match_length; ++i) {
+            output.push_back(output[output.size() - distance]);
+        }
+    }
+}
+
+[[nodiscard]] InflateResult inflate_zlib(
     std::span<const std::uint8_t> compressed,
     std::size_t output_limit) {
     if (compressed.size() < 6U) {
@@ -79,73 +342,55 @@ struct StoredInflateResult {
         return {RasterDecodeError::UnsupportedFeature, {}};
     }
 
-    std::size_t byte_offset = 2U;
-    unsigned bit_offset = 0U;
+    const std::size_t deflate_end = compressed.size() - 4U;
+    DeflateBitReader reader(compressed, 2U, deflate_end);
     bool final_block = false;
     std::vector<std::uint8_t> output;
     output.reserve(std::min(output_limit, compressed.size() * 2U));
 
-    auto read_bits = [&](unsigned count, std::uint32_t& value) -> bool {
-        value = 0U;
-        for (unsigned i = 0U; i < count; ++i) {
-            if (byte_offset >= compressed.size() - 4U) {
-                return false;
-            }
-            const std::uint32_t bit = (static_cast<std::uint32_t>(compressed[byte_offset]) >> bit_offset) & 1U;
-            value |= bit << i;
-            ++bit_offset;
-            if (bit_offset == 8U) {
-                bit_offset = 0U;
-                ++byte_offset;
-            }
-        }
-        return true;
-    };
-
     while (!final_block) {
         std::uint32_t final_value = 0U;
         std::uint32_t block_type = 0U;
-        if (!read_bits(1U, final_value) || !read_bits(2U, block_type)) {
+        if (!reader.read_bits(1U, final_value) || !reader.read_bits(2U, block_type)) {
             return {RasterDecodeError::TruncatedPixelData, {}};
         }
         final_block = final_value != 0U;
-        if (block_type != 0U) {
-            return {RasterDecodeError::UnsupportedFeature, {}};
-        }
 
-        if (bit_offset != 0U) {
-            bit_offset = 0U;
-            ++byte_offset;
-        }
-        if (!checked_range(byte_offset, 4U, compressed.size() - 4U)) {
-            return {RasterDecodeError::TruncatedPixelData, {}};
-        }
-        const std::uint16_t length = static_cast<std::uint16_t>(compressed[byte_offset]) |
-                                     static_cast<std::uint16_t>(static_cast<std::uint16_t>(compressed[byte_offset + 1U]) << 8U);
-        const std::uint16_t inverse = static_cast<std::uint16_t>(compressed[byte_offset + 2U]) |
-                                      static_cast<std::uint16_t>(static_cast<std::uint16_t>(compressed[byte_offset + 3U]) << 8U);
-        if (static_cast<std::uint16_t>(length ^ 0xffffU) != inverse) {
+        if (block_type == 0U) {
+            if (!reader.align_to_byte()) {
+                return {RasterDecodeError::TruncatedPixelData, {}};
+            }
+            std::uint16_t length = 0U;
+            std::uint16_t inverse = 0U;
+            if (!reader.read_u16_le(length) || !reader.read_u16_le(inverse)) {
+                return {RasterDecodeError::TruncatedPixelData, {}};
+            }
+            if (static_cast<std::uint16_t>(length ^ 0xffffU) != inverse) {
+                return {RasterDecodeError::MalformedContainer, {}};
+            }
+            const std::size_t length_size = static_cast<std::size_t>(length);
+            if (length_size > output_limit - output.size()) {
+                return {RasterDecodeError::PixelBudgetExceeded, {}};
+            }
+            if (!reader.read_bytes(length_size, output, output_limit)) {
+                return {RasterDecodeError::TruncatedPixelData, {}};
+            }
+        } else if (block_type == 1U) {
+            const RasterDecodeError error = decode_fixed_block(reader, output, output_limit);
+            if (error != RasterDecodeError::None) {
+                return {error, {}};
+            }
+        } else if (block_type == 2U) {
+            return {RasterDecodeError::UnsupportedFeature, {}};
+        } else {
             return {RasterDecodeError::MalformedContainer, {}};
         }
-        byte_offset += 4U;
-        const std::size_t length_size = static_cast<std::size_t>(length);
-        if (!checked_range(byte_offset, length_size, compressed.size() - 4U)) {
-            return {RasterDecodeError::TruncatedPixelData, {}};
-        }
-        if (length_size > output_limit - output.size()) {
-            return {RasterDecodeError::PixelBudgetExceeded, {}};
-        }
-        output.insert(
-            output.end(),
-            compressed.begin() + static_cast<std::ptrdiff_t>(byte_offset),
-            compressed.begin() + static_cast<std::ptrdiff_t>(byte_offset + length_size));
-        byte_offset += length_size;
     }
 
-    if (bit_offset != 0U || byte_offset + 4U != compressed.size()) {
+    if (!reader.align_zero_padding() || !reader.at_end()) {
         return {RasterDecodeError::MalformedContainer, {}};
     }
-    const std::uint32_t expected_adler = read_be32(compressed, byte_offset);
+    const std::uint32_t expected_adler = read_be32(compressed, deflate_end);
     if (adler32(output) != expected_adler) {
         return {RasterDecodeError::MalformedContainer, {}};
     }
@@ -334,7 +579,7 @@ RasterDecodeResult decode_png(std::span<const std::uint8_t> bytes) {
         return {RasterDecodeError::PixelBudgetExceeded, {}};
     }
     const std::size_t filtered_size = height_size * (row_bytes + 1U);
-    const StoredInflateResult inflated = inflate_stored_zlib(idat, filtered_size);
+    const InflateResult inflated = inflate_zlib(idat, filtered_size);
     if (inflated.error != RasterDecodeError::None) {
         return {inflated.error, {}};
     }
