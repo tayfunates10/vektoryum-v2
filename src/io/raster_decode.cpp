@@ -12,6 +12,9 @@
 #include <vector>
 
 namespace vektoryum::io {
+namespace detail {
+[[nodiscard]] RasterDecodeResult decode_png(std::span<const std::uint8_t> bytes);
+}
 namespace {
 
 enum class ByteOrder : std::uint8_t { Little, Big };
@@ -62,8 +65,8 @@ struct IfdEntry {
 
 [[nodiscard]] std::size_t tiff_type_size(std::uint16_t type) noexcept {
     switch (type) {
-        case 3U: return 2U;  // SHORT
-        case 4U: return 4U;  // LONG
+        case 3U: return 2U;
+        case 4U: return 4U;
         default: return 0U;
     }
 }
@@ -323,7 +326,7 @@ RasterDecodeResult decode_raster(RasterFormat format, std::span<const std::uint8
     try {
         switch (format) {
             case RasterFormat::Tiff: return decode_tiff(bytes);
-            case RasterFormat::Png:
+            case RasterFormat::Png: return detail::decode_png(bytes);
             case RasterFormat::Jpeg:
             case RasterFormat::Webp:
             case RasterFormat::Unknown: return fail(RasterDecodeError::UnsupportedFormat);
