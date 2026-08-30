@@ -13,6 +13,7 @@
 
 namespace vektoryum::io {
 namespace detail {
+[[nodiscard]] RasterDecodeResult decode_jpeg(std::span<const std::uint8_t> bytes);
 [[nodiscard]] RasterDecodeResult decode_png(std::span<const std::uint8_t> bytes);
 }
 namespace {
@@ -327,7 +328,7 @@ RasterDecodeResult decode_raster(RasterFormat format, std::span<const std::uint8
         switch (format) {
             case RasterFormat::Tiff: return decode_tiff(bytes);
             case RasterFormat::Png: return detail::decode_png(bytes);
-            case RasterFormat::Jpeg:
+            case RasterFormat::Jpeg: return detail::decode_jpeg(bytes);
             case RasterFormat::Webp:
             case RasterFormat::Unknown: return fail(RasterDecodeError::UnsupportedFormat);
         }
