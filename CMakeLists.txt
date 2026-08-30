@@ -24,6 +24,7 @@ add_library(vektoryum_core STATIC
     src/hybrid/hybrid_output_contract.cpp
     src/hybrid/hybrid_plan.cpp
     src/io/limits.cpp
+    src/io/raster_decode.cpp
     src/ml/artifact_digest.cpp
     src/ml/runtime_contract.cpp
     src/release/package_contents.cpp
@@ -148,6 +149,10 @@ add_executable(vektoryum_package_identity_tests tests/test_package_identity.cpp)
 target_link_libraries(vektoryum_package_identity_tests PRIVATE vektoryum_core)
 vektoryum_apply_warnings(vektoryum_package_identity_tests)
 
+add_executable(vektoryum_raster_decode_tests tests/test_raster_decode.cpp)
+target_link_libraries(vektoryum_raster_decode_tests PRIVATE vektoryum_core)
+vektoryum_apply_warnings(vektoryum_raster_decode_tests)
+
 if(VEKTORYUM_ENABLE_SANITIZERS AND NOT MSVC)
     foreach(target
         vektoryum_tests
@@ -167,7 +172,8 @@ if(VEKTORYUM_ENABLE_SANITIZERS AND NOT MSVC)
         vektoryum_release_manifest_tests
         vektoryum_package_inventory_tests
         vektoryum_package_contents_tests
-        vektoryum_package_identity_tests)
+        vektoryum_package_identity_tests
+        vektoryum_raster_decode_tests)
         target_compile_options(${target} PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
         target_link_options(${target} PRIVATE -fsanitize=address,undefined)
     endforeach()
@@ -191,3 +197,4 @@ add_test(NAME vektoryum.release_manifest COMMAND vektoryum_release_manifest_test
 add_test(NAME vektoryum.package_inventory COMMAND vektoryum_package_inventory_tests)
 add_test(NAME vektoryum.package_contents COMMAND vektoryum_package_contents_tests)
 add_test(NAME vektoryum.package_identity COMMAND vektoryum_package_identity_tests)
+add_test(NAME vektoryum.raster_decode COMMAND vektoryum_raster_decode_tests)
