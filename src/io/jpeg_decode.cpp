@@ -127,24 +127,23 @@ private:
                 if (pos_ >= bytes_.size()) {
                     return std::nullopt;
                 }
-                const std::uint8_t stuffed = bytes_[pos_];
-                if (stuffed != 0x00U) {
+                if (bytes_[pos_] != 0x00U) {
                     --pos_;
                     return std::nullopt;
                 }
                 ++pos_;
                 value = 0xffU;
             }
-            current_ = value;
+            current_ = static_cast<std::uint32_t>(value);
             bits_remaining_ = 8U;
         }
         --bits_remaining_;
-        return static_cast<std::uint32_t>((current_ >> bits_remaining_) & 1U);
+        return (current_ >> bits_remaining_) & 1U;
     }
 
     std::span<const std::uint8_t> bytes_{};
     std::size_t pos_{};
-    std::uint8_t current_{};
+    std::uint32_t current_{};
     unsigned bits_remaining_{};
 };
 
@@ -352,7 +351,7 @@ private:
             if (!dc_symbol.has_value() || *dc_symbol > 11U) {
                 return fail(RasterDecodeError::TruncatedPixelData);
             }
-            const auto dc_delta = receive_extend(reader, *dc_symbol);
+            const auto dc_delta = receive_extend(reader, static_cast<unsigned>(*dc_symbol));
             if (!dc_delta.has_value()) {
                 return fail(RasterDecodeError::TruncatedPixelData);
             }
@@ -492,8 +491,8 @@ RasterDecodeResult decode_jpeg(std::span<const std::uint8_t> bytes) {
                 return fail(RasterDecodeError::UnsupportedFeature);
             }
         } else if (marker == 0xdaU) {
-            if (!frame.defined || payload.size() != 8U || payload[0U] != 1U || payload[1U] != frame.component_id ||
-                payload[4U] != 0U || payload[5U] != 63U || payload[6U] != 0U) {
+            if (!frame.defined || payload.size() != 6U || payload[0U] != 1U || payload[1U] != frame.component_id ||
+                payload[3U] != 0U || payload[4U] != 63U || payload[5U] != 0U) {
                 return fail(RasterDecodeError::UnsupportedFeature);
             }
             const std::uint8_t selector = payload[2U];
