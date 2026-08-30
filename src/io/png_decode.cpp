@@ -166,6 +166,7 @@ struct DeflateHuffman {
     if (lengths.empty() || lengths.size() > table.lengths.size()) {
         return false;
     }
+    table = {};
     std::array<std::uint16_t, 16U> count{};
     std::array<std::uint16_t, 16U> next_code{};
     for (const std::uint8_t length : lengths) {
@@ -251,12 +252,12 @@ struct DeflateHuffman {
     return table;
 }
 
-[[nodiscard]] RasterDecodeError decode_fixed_block(
+[[nodiscard]] RasterDecodeError decode_huffman_block(
     DeflateBitReader& reader,
     std::vector<std::uint8_t>& output,
-    std::size_t output_limit) {
-    static const DeflateHuffman literals = fixed_literal_table();
-    static const DeflateHuffman distances = fixed_distance_table();
+    std::size_t output_limit,
+    const DeflateHuffman& literals,
+    const DeflateHuffman& distances) {
     constexpr std::array<std::uint16_t, 29U> length_base{
         3U, 4U, 5U, 6U, 7U, 8U, 9U, 10U, 11U, 13U, 15U, 17U, 19U, 23U, 27U,
         31U, 35U, 43U, 51U, 59U, 67U, 83U, 99U, 115U, 131U, 163U, 195U, 227U, 258U};
@@ -324,6 +325,108 @@ struct DeflateHuffman {
     }
 }
 
+[[nodiscard]] RasterDecodeError decode_fixed_block(
+    DeflateBitReader& reader,
+    std::vector<std::uint8_t>& output,
+    std::size_t output_limit) {
+    static const DeflateHuffman literals = fixed_literal_table();
+    static const DeflateHuffman distances = fixed_distance_table();
+    return decode_huffman_block(reader, output, output_limit, literals, distances);
+}
+
+[[nodiscard]] RasterDecodeError decode_dynamic_block(
+    DeflateBitReader& reader,
+    std::vector<std::uint8_t>& output,
+    std::size_t output_limit) {
+    std::uint32_t hlit_raw = 0U;
+    std::uint32_t hdist_raw = 0U;
+    std::uint32_t hclen_raw = 0U;
+    if (!reader.read_bits(5U, hlit_raw) || !reader.read_bits(5U, hdist_raw) ||
+        !reader.read_bits(4U, hclen_raw)) {
+        return RasterDecodeError::TruncatedPixelData;
+    }
+    if (hlit_raw > 29U || hdist_raw > 29U) {
+        return RasterDecodeError::MalformedContainer;
+    }
+
+    const std::size_t literal_count = static_cast<std::size_t>(hlit_raw) + 257U;
+    const std::size_t distance_count = static_cast<std::size_t>(hdist_raw) + 1U;
+    const std::size_t code_length_count = static_cast<std::size_t>(hclen_raw) + 4U;
+    constexpr std::array<std::uint8_t, 19U> code_length_order{
+        16U, 17U, 18U, 0U, 8U, 7U, 9U, 6U, 10U, 5U,
+        11U, 4U, 12U, 3U, 13U, 2U, 14U, 1U, 15U};
+
+    std::array<std::uint8_t, 19U> code_length_lengths{};
+    for (std::size_t i = 0U; i < code_length_count; ++i) {
+        std::uint32_t value = 0U;
+        if (!reader.read_bits(3U, value)) {
+            return RasterDecodeError::TruncatedPixelData;
+        }
+        code_length_lengths[code_length_order[i]] = static_cast<std::uint8_t>(value);
+    }
+    DeflateHuffman code_length_table{};
+    if (!build_huffman(code_length_lengths, code_length_table)) {
+        return RasterDecodeError::MalformedContainer;
+    }
+
+    const std::size_t total_count = literal_count + distance_count;
+    std::vector<std::uint8_t> lengths;
+    lengths.reserve(total_count);
+    while (lengths.size() < total_count) {
+        std::uint16_t symbol = 0U;
+        if (!decode_symbol(reader, code_length_table, symbol)) {
+            return RasterDecodeError::TruncatedPixelData;
+        }
+        if (symbol <= 15U) {
+            lengths.push_back(static_cast<std::uint8_t>(symbol));
+            continue;
+        }
+
+        std::size_t repeat = 0U;
+        std::uint8_t repeated_value = 0U;
+        std::uint32_t extra = 0U;
+        if (symbol == 16U) {
+            if (lengths.empty() || !reader.read_bits(2U, extra)) {
+                return lengths.empty() ? RasterDecodeError::MalformedContainer
+                                       : RasterDecodeError::TruncatedPixelData;
+            }
+            repeat = static_cast<std::size_t>(extra) + 3U;
+            repeated_value = lengths.back();
+        } else if (symbol == 17U) {
+            if (!reader.read_bits(3U, extra)) {
+                return RasterDecodeError::TruncatedPixelData;
+            }
+            repeat = static_cast<std::size_t>(extra) + 3U;
+        } else if (symbol == 18U) {
+            if (!reader.read_bits(7U, extra)) {
+                return RasterDecodeError::TruncatedPixelData;
+            }
+            repeat = static_cast<std::size_t>(extra) + 11U;
+        } else {
+            return RasterDecodeError::MalformedContainer;
+        }
+        if (repeat > total_count - lengths.size()) {
+            return RasterDecodeError::MalformedContainer;
+        }
+        lengths.insert(lengths.end(), repeat, repeated_value);
+    }
+
+    std::vector<std::uint8_t> literal_lengths(
+        lengths.begin(), lengths.begin() + static_cast<std::ptrdiff_t>(literal_count));
+    std::vector<std::uint8_t> distance_lengths(
+        lengths.begin() + static_cast<std::ptrdiff_t>(literal_count), lengths.end());
+    if (literal_lengths.size() <= 256U || literal_lengths[256U] == 0U) {
+        return RasterDecodeError::MalformedContainer;
+    }
+
+    DeflateHuffman literals{};
+    DeflateHuffman distances{};
+    if (!build_huffman(literal_lengths, literals) || !build_huffman(distance_lengths, distances)) {
+        return RasterDecodeError::MalformedContainer;
+    }
+    return decode_huffman_block(reader, output, output_limit, literals, distances);
+}
+
 [[nodiscard]] InflateResult inflate_zlib(
     std::span<const std::uint8_t> compressed,
     std::size_t output_limit) {
@@ -381,7 +484,10 @@ struct DeflateHuffman {
                 return {error, {}};
             }
         } else if (block_type == 2U) {
-            return {RasterDecodeError::UnsupportedFeature, {}};
+            const RasterDecodeError error = decode_dynamic_block(reader, output, output_limit);
+            if (error != RasterDecodeError::None) {
+                return {error, {}};
+            }
         } else {
             return {RasterDecodeError::MalformedContainer, {}};
         }
