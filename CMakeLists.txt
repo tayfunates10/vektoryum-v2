@@ -26,6 +26,7 @@ add_library(vektoryum_core STATIC
     src/io/limits.cpp
     src/ml/artifact_digest.cpp
     src/ml/runtime_contract.cpp
+    src/release/package_contents.cpp
     src/release/package_inventory.cpp
     src/release/release_manifest.cpp
     src/resample/resampler.cpp
@@ -138,6 +139,10 @@ add_executable(vektoryum_package_inventory_tests tests/test_package_inventory.cp
 target_link_libraries(vektoryum_package_inventory_tests PRIVATE vektoryum_core)
 vektoryum_apply_warnings(vektoryum_package_inventory_tests)
 
+add_executable(vektoryum_package_contents_tests tests/test_package_contents.cpp)
+target_link_libraries(vektoryum_package_contents_tests PRIVATE vektoryum_core)
+vektoryum_apply_warnings(vektoryum_package_contents_tests)
+
 if(VEKTORYUM_ENABLE_SANITIZERS AND NOT MSVC)
     foreach(target
         vektoryum_tests
@@ -155,7 +160,8 @@ if(VEKTORYUM_ENABLE_SANITIZERS AND NOT MSVC)
         vektoryum_quality_certificate_e2e_tests
         vektoryum_stable_api_tests
         vektoryum_release_manifest_tests
-        vektoryum_package_inventory_tests)
+        vektoryum_package_inventory_tests
+        vektoryum_package_contents_tests)
         target_compile_options(${target} PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
         target_link_options(${target} PRIVATE -fsanitize=address,undefined)
     endforeach()
@@ -177,3 +183,4 @@ add_test(NAME vektoryum.quality_certificate_e2e COMMAND vektoryum_quality_certif
 add_test(NAME vektoryum.stable_api COMMAND vektoryum_stable_api_tests)
 add_test(NAME vektoryum.release_manifest COMMAND vektoryum_release_manifest_tests)
 add_test(NAME vektoryum.package_inventory COMMAND vektoryum_package_inventory_tests)
+add_test(NAME vektoryum.package_contents COMMAND vektoryum_package_contents_tests)
