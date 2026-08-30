@@ -84,6 +84,11 @@ struct ResponseEnvelope {
     RequestError error{RequestError::UnsupportedOperation};
 };
 
+struct CertifiedOperationResponse {
+    ResponseEnvelope response;
+    std::string certificate_sha256;
+};
+
 [[nodiscard]] RequestValidation validate_request_envelope(
     const RequestEnvelope& request,
     const RequestLimits& limits = {}) noexcept;
@@ -91,10 +96,15 @@ struct ResponseEnvelope {
     const CertifiedOperationRequest& request,
     const certification::QualityCertificateArtifact& certificate,
     const RequestLimits& limits = {});
+[[nodiscard]] CertifiedOperationResponse execute_certified_operation(
+    const CertifiedOperationRequest& request,
+    const certification::QualityCertificateArtifact& certificate,
+    const RequestLimits& limits = {});
 
 [[nodiscard]] std::string canonical_request_report(const RequestEnvelope& request);
 [[nodiscard]] std::string canonical_certified_request_report(const CertifiedOperationRequest& request);
 [[nodiscard]] std::string canonical_response_report(const ResponseEnvelope& response);
+[[nodiscard]] std::string canonical_certified_response_report(const CertifiedOperationResponse& response);
 [[nodiscard]] std::string_view operation_name(Operation operation) noexcept;
 [[nodiscard]] std::string_view request_error_name(RequestError error) noexcept;
 [[nodiscard]] std::string_view response_status_name(ResponseStatus status) noexcept;
