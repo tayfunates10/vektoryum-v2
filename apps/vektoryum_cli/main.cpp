@@ -14,7 +14,7 @@ int print_version() {
     return static_cast<int>(vektoryum::api::ExitCode::Success);
 }
 
-vektoryum::certification::QualityCertificateResult issue_cli_stage11_certificate() {
+vektoryum::certification::QualityCertificateIssueResult issue_cli_stage11_certificate() {
     vektoryum::hybrid::HybridOutputManifest source{};
     source.output_id = "hybrid-output-stage12-cli-0001";
     source.output_sha256 = std::string(64U, 'a');
