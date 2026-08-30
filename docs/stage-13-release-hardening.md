@@ -33,8 +33,16 @@ The third slice verifies the concrete package contents observed after assembly o
 
 Validation is order-independent but exact-set: missing entries, duplicate observed paths, undeclared residue, traversal/debug paths, symlinks, directories, other non-regular entries, size substitution, digest substitution and release-manifest substitution all fail closed. This creates the filesystem-boundary acceptance contract without allowing package extraction behavior to silently widen the Stage 13 allow-list. Dedicated CTest coverage runs on Ubuntu, Windows and macOS and under Linux ASan/UBSan.
 
+## Fourth safe slice — complete package identity
+
+`vektoryum.package-identity.v1` binds the exact canonical release-manifest SHA-256 and canonical package-inventory SHA-256 into one deterministic package identity. Identical explicit inputs produce byte-identical identity bytes and SHA-256; inventory enumeration order cannot alter identity. Release-manifest substitution, package-inventory substitution, forged package digest and foreign identity schema all fail closed.
+
+## Fifth safe slice — staged packaged CLI contract
+
+The Stage 12 CLI contract runner now accepts an explicit staged executable path without changing any expected stdout/stderr bytes or exit codes. CI copies the built CLI into a clean `release-package/bin` staging tree and reruns the full byte-exact CLI contract from that staged location on Ubuntu, Windows and macOS. This proves that the release-staged executable preserves `--help`, `--version`, unsupported-command fail-closed behavior, certified-export determinism and Stage 11 certificate provenance after packaging relocation.
+
 ## Remaining acceptance
 
-- Prove release package reproducibility from identical explicit inputs and reject manifest/package substitution at the complete package identity boundary.
-- Execute the packaged CLI contract end-to-end on Ubuntu, Windows and macOS while retaining sanitizer coverage for release-contract code.
-- Perform final fresh exact-head Stage 13 acceptance before expected-head merge.
+- Obtain fresh exact-head green CI for the staged packaged CLI gate on Ubuntu, Windows and macOS while retaining Linux ASan/UBSan coverage.
+- Re-fetch the exact PR head, confirm mergeable=true and zero unresolved blocking review threads.
+- Mark Stage 13 complete, update project progress to 100%, and perform expected-head merge.
