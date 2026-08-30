@@ -21,10 +21,15 @@ The first slice introduces `vektoryum.release-manifest.v1`. A release manifest b
 
 Validation fails closed for a foreign manifest schema, foreign product version, foreign Core API schema, malformed/uppercase source revision and unsupported release channel. Tests prove byte-for-byte manifest repeatability, digest repeatability, stable-channel support and cryptographic separation between candidate and stable identities. The dedicated CTest target is included in normal cross-platform CI and Linux ASan/UBSan builds.
 
+## Second safe slice — allow-listed package inventory
+
+The second slice introduces `vektoryum.package-inventory.v1`. Every inventory is cryptographically bound to one canonical release-manifest SHA-256 and contains only explicit logical package paths, non-zero byte sizes and lowercase SHA-256 file identities. Canonical serialization sorts entries by path, so input enumeration order cannot change package identity. The inventory digest is SHA-256 over those canonical bytes.
+
+The initial package allow-list contains only the production CLI and release metadata logical paths. Duplicate paths, traversal/absolute or otherwise non-allow-listed paths, debug/build residue, malformed digests, empty files, empty inventories and packages that exceed the immutable 512 MiB total budget fail closed. Replacing the bound release-manifest digest changes the package-inventory identity. Dedicated CTest coverage runs on Ubuntu, Windows and macOS and under Linux ASan/UBSan without weakening any Stage 0-12 gate.
+
 ## Remaining acceptance
 
-- Bind deterministic package inventory and package digest to the canonical release manifest.
-- Add allow-listed package assembly/install/extract verification with hostile-path and residue rejection.
+- Add deterministic package assembly/install/extract verification that consumes only a validated package inventory and rejects hostile paths or undeclared residue at the filesystem boundary.
 - Prove release package reproducibility from identical explicit inputs and reject manifest/package substitution.
 - Execute the packaged CLI contract end-to-end on Ubuntu, Windows and macOS while retaining sanitizer coverage for release-contract code.
 - Perform final fresh exact-head Stage 13 acceptance before expected-head merge.
