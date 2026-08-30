@@ -8,6 +8,7 @@
 #include "vektoryum/export/canonical_encoder.hpp"
 
 using vektoryum::api::CertifiedOperationRequest;
+using vektoryum::api::CertifiedOperationResponse;
 using vektoryum::api::ExitCode;
 using vektoryum::api::Operation;
 using vektoryum::api::RequestEnvelope;
@@ -16,8 +17,10 @@ using vektoryum::api::RequestLimits;
 using vektoryum::api::ResponseEnvelope;
 using vektoryum::api::ResponseStatus;
 using vektoryum::api::canonical_certified_request_report;
+using vektoryum::api::canonical_certified_response_report;
 using vektoryum::api::canonical_request_report;
 using vektoryum::api::canonical_response_report;
+using vektoryum::api::execute_certified_operation;
 using vektoryum::api::stable_api_major;
 using vektoryum::api::stable_api_minor;
 using vektoryum::api::stable_schema_version;
@@ -217,6 +220,17 @@ int main() {
     assert(certified_a.find("operation=certified_export\n") != std::string::npos);
     assert(certified_a.find("certificate_sha256=" + certificate_a.certificate_sha256 + "\n") != std::string::npos);
 
+    const CertifiedOperationResponse executed_a = execute_certified_operation(certified, certificate_a);
+    const CertifiedOperationResponse executed_b = execute_certified_operation(certified, certificate_b);
+    const std::string executed_report_a = canonical_certified_response_report(executed_a);
+    const std::string executed_report_b = canonical_certified_response_report(executed_b);
+    assert(executed_report_a == executed_report_b);
+    assert(executed_a.response.status == ResponseStatus::Success);
+    assert(executed_a.response.exit_code == ExitCode::Success);
+    assert(executed_a.response.error == RequestError::None);
+    assert(executed_a.certificate_sha256 == certificate_a.certificate_sha256);
+    assert(executed_report_a.find("certificate_sha256=" + certificate_a.certificate_sha256 + "\n") != std::string::npos);
+
     CertifiedOperationRequest missing_certificate = certified;
     missing_certificate.certificate_sha256.clear();
     assert(validate_certified_operation_request(missing_certificate, certificate_a).error ==
@@ -226,6 +240,12 @@ int main() {
     substituted.certificate_sha256 = std::string(64U, 'b');
     assert(validate_certified_operation_request(substituted, certificate_a).error ==
            RequestError::CertificateProvenanceMismatch);
+    const CertifiedOperationResponse substituted_response = execute_certified_operation(substituted, certificate_a);
+    assert(substituted_response.response.status == ResponseStatus::Error);
+    assert(substituted_response.response.exit_code == ExitCode::Data);
+    assert(substituted_response.response.error == RequestError::CertificateProvenanceMismatch);
+    assert(substituted_response.certificate_sha256.empty());
+    assert(canonical_certified_response_report(substituted_response).find("certificate_sha256=\n") != std::string::npos);
 
     QualityCertificateArtifact substituted_artifact = certificate_a;
     substituted_artifact.certificate_sha256 = std::string(64U, 'b');
