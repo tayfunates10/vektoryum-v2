@@ -48,6 +48,26 @@ jobs:
       - name: CLI contract test
         run: cmake -DBUILD_DIR=build -P tests/cli_contract.cmake
 
+      - name: Stage release CLI (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          cmake -E make_directory release-package/bin
+          cmake -E copy build/vektoryum_cli release-package/bin/vektoryum_cli
+
+      - name: Stage release CLI (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          cmake -E make_directory release-package/bin
+          cmake -E copy build/Release/vektoryum_cli.exe release-package/bin/vektoryum_cli.exe
+
+      - name: Packaged CLI contract test (Unix)
+        if: runner.os != 'Windows'
+        run: cmake -DCLI_PATH=release-package/bin/vektoryum_cli -P tests/cli_contract.cmake
+
+      - name: Packaged CLI contract test (Windows)
+        if: runner.os == 'Windows'
+        run: cmake -DCLI_PATH=release-package/bin/vektoryum_cli.exe -P tests/cli_contract.cmake
+
       - name: CLI smoke test (Unix)
         if: runner.os != 'Windows'
         run: ./build/vektoryum_cli
