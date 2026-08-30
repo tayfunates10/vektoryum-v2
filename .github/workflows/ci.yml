@@ -37,7 +37,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Configure
-        run: cmake -S . -B build -DVEKTORYUM_WARNINGS_AS_ERRORS=ON
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DVEKTORYUM_WARNINGS_AS_ERRORS=ON
 
       - name: Build
         run: cmake --build build --config Release --parallel
