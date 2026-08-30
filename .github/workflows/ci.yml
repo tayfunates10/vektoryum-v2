@@ -45,6 +45,9 @@ jobs:
       - name: Test
         run: ctest --test-dir build -C Release --output-on-failure
 
+      - name: CLI contract test
+        run: cmake -DBUILD_DIR=build -P tests/cli_contract.cmake
+
       - name: CLI smoke test (Unix)
         if: runner.os != 'Windows'
         run: ./build/vektoryum_cli
@@ -72,3 +75,9 @@ jobs:
           ASAN_OPTIONS: detect_leaks=1:halt_on_error=1
           UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
         run: ctest --test-dir build-sanitize --output-on-failure
+
+      - name: CLI contract test under sanitizers
+        env:
+          ASAN_OPTIONS: detect_leaks=1:halt_on_error=1
+          UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
+        run: cmake -DBUILD_DIR=build-sanitize -P tests/cli_contract.cmake

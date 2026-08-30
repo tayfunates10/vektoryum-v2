@@ -11,6 +11,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 add_library(vektoryum_core STATIC
     src/analysis/content_analyzer.cpp
+    src/api/stable_api.cpp
     src/certification/quality_certificate.cpp
     src/core/color.cpp
     src/core/image.cpp
@@ -123,6 +124,10 @@ add_executable(vektoryum_quality_certificate_e2e_tests tests/test_quality_certif
 target_link_libraries(vektoryum_quality_certificate_e2e_tests PRIVATE vektoryum_core)
 vektoryum_apply_warnings(vektoryum_quality_certificate_e2e_tests)
 
+add_executable(vektoryum_stable_api_tests tests/test_stable_api.cpp)
+target_link_libraries(vektoryum_stable_api_tests PRIVATE vektoryum_core)
+vektoryum_apply_warnings(vektoryum_stable_api_tests)
+
 if(VEKTORYUM_ENABLE_SANITIZERS AND NOT MSVC)
     foreach(target
         vektoryum_tests
@@ -137,7 +142,8 @@ if(VEKTORYUM_ENABLE_SANITIZERS AND NOT MSVC)
         vektoryum_canonical_encoder_tests
         vektoryum_export_destination_contract_tests
         vektoryum_quality_certificate_tests
-        vektoryum_quality_certificate_e2e_tests)
+        vektoryum_quality_certificate_e2e_tests
+        vektoryum_stable_api_tests)
         target_compile_options(${target} PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
         target_link_options(${target} PRIVATE -fsanitize=address,undefined)
     endforeach()
@@ -156,3 +162,4 @@ add_test(NAME vektoryum.canonical_encoder COMMAND vektoryum_canonical_encoder_te
 add_test(NAME vektoryum.export_destination_contract COMMAND vektoryum_export_destination_contract_tests)
 add_test(NAME vektoryum.quality_certificate COMMAND vektoryum_quality_certificate_tests)
 add_test(NAME vektoryum.quality_certificate_e2e COMMAND vektoryum_quality_certificate_e2e_tests)
+add_test(NAME vektoryum.stable_api COMMAND vektoryum_stable_api_tests)
