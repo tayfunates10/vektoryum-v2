@@ -5,7 +5,7 @@
 #include <vector>
 
 #include "vektoryum/certification/quality_certificate.hpp"
-#include "vektoryum/ml/artifact_digest.hpp"
+#include "vektoryum/export/canonical_encoder.hpp"
 
 using vektoryum::api::CertifiedOperationRequest;
 using vektoryum::api::ExitCode;
@@ -23,7 +23,14 @@ using vektoryum::api::stable_api_minor;
 using vektoryum::api::stable_schema_version;
 using vektoryum::api::validate_certified_operation_request;
 using vektoryum::api::validate_request_envelope;
+using vektoryum::certification::MetricGate;
 using vektoryum::certification::QualityCertificateArtifact;
+using vektoryum::certification::QualityCertificateRequest;
+using vektoryum::certification::issue_quality_certificate;
+using vektoryum::exporting::ExportFormat;
+using vektoryum::exporting::ExportRequest;
+using vektoryum::exporting::encode_canonical_export;
+using vektoryum::hybrid::HybridOutputManifest;
 
 namespace {
 
@@ -38,21 +45,42 @@ namespace {
     };
 }
 
-[[nodiscard]] QualityCertificateArtifact valid_certificate() {
-    QualityCertificateArtifact artifact;
-    artifact.certificate_id = "stage11-certificate-0001";
-    artifact.input_sha256 = std::string(64U, '1');
-    artifact.output_sha256 = std::string(64U, '2');
-    artifact.toolchain_revision = "stage11-toolchain-0001";
-    const std::string report =
-        "schema_version=vektoryum.quality-certificate.v1\n"
-        "certificate_id=stage11-certificate-0001\n"
-        "input_sha256=" + artifact.input_sha256 + "\n"
-        "output_sha256=" + artifact.output_sha256 + "\n"
-        "toolchain_revision=stage11-toolchain-0001\n";
-    artifact.canonical_bytes.assign(report.begin(), report.end());
-    artifact.certificate_sha256 = vektoryum::ml::sha256_hex(artifact.canonical_bytes);
-    return artifact;
+[[nodiscard]] QualityCertificateArtifact issued_stage11_certificate() {
+    HybridOutputManifest source{};
+    source.output_id = "hybrid-output-stage12-0001";
+    source.output_sha256 = std::string(64U, 'a');
+    source.seam_error = 0.005;
+
+    const ExportRequest export_request{
+        "vektoryum.export.v1",
+        "export-stage12-0001",
+        ExportFormat::Svg,
+        source.output_id,
+        source.output_sha256,
+        32U,
+        32U,
+        4096U,
+    };
+    const auto encoded = encode_canonical_export(export_request, source);
+    assert(encoded.ok());
+
+    QualityCertificateRequest certificate_request;
+    certificate_request.schema_version = "quality-certificate-v1";
+    certificate_request.certificate_id = "stage11-issued-certificate-0001";
+    certificate_request.input_sha256 = encoded.artifact.source_output_sha256;
+    certificate_request.output_sha256 = encoded.artifact.output_sha256;
+    certificate_request.toolchain_revision = "stage11-toolchain-0001";
+    certificate_request.sample_count = 64U;
+    certificate_request.execution_units = 1000U;
+    certificate_request.metrics = {
+        MetricGate{"alpha_mae", 0.01, 0.0, 0.02},
+        MetricGate{"seam_ratio", 0.005, 0.0, 0.01},
+        MetricGate{"vector_iou", 0.995, 0.99, 1.0},
+    };
+
+    const auto issued = issue_quality_certificate(certificate_request, export_request, source, encoded.artifact);
+    assert(issued.ok());
+    return issued.artifact;
 }
 
 }  // namespace
@@ -163,7 +191,11 @@ int main() {
     invalid.work_units = limits.max_work_units + 1U;
     assert(validate_request_envelope(invalid, limits).error == RequestError::WorkLimitExceeded);
 
-    const QualityCertificateArtifact certificate = valid_certificate();
+    const QualityCertificateArtifact certificate_a = issued_stage11_certificate();
+    const QualityCertificateArtifact certificate_b = issued_stage11_certificate();
+    assert(certificate_a.canonical_bytes == certificate_b.canonical_bytes);
+    assert(certificate_a.certificate_sha256 == certificate_b.certificate_sha256);
+
     CertifiedOperationRequest certified{
         RequestEnvelope{
             std::string(stable_schema_version),
@@ -173,38 +205,44 @@ int main() {
             8192U,
             200U,
         },
-        certificate.certificate_sha256,
+        certificate_a.certificate_sha256,
     };
 
     assert(validate_request_envelope(certified.request).error == RequestError::MissingCertificateEvidence);
-    assert(validate_certified_operation_request(certified, certificate).ok());
+    assert(validate_certified_operation_request(certified, certificate_a).ok());
+    assert(validate_certified_operation_request(certified, certificate_b).ok());
     const std::string certified_a = canonical_certified_request_report(certified);
     const std::string certified_b = canonical_certified_request_report(certified);
     assert(certified_a == certified_b);
     assert(certified_a.find("operation=certified_export\n") != std::string::npos);
-    assert(certified_a.find("certificate_sha256=" + certificate.certificate_sha256 + "\n") != std::string::npos);
+    assert(certified_a.find("certificate_sha256=" + certificate_a.certificate_sha256 + "\n") != std::string::npos);
 
     CertifiedOperationRequest missing_certificate = certified;
     missing_certificate.certificate_sha256.clear();
-    assert(validate_certified_operation_request(missing_certificate, certificate).error ==
+    assert(validate_certified_operation_request(missing_certificate, certificate_a).error ==
            RequestError::MissingCertificateEvidence);
 
     CertifiedOperationRequest substituted = certified;
-    substituted.certificate_sha256 = std::string(64U, 'a');
-    assert(validate_certified_operation_request(substituted, certificate).error ==
+    substituted.certificate_sha256 = std::string(64U, 'b');
+    assert(validate_certified_operation_request(substituted, certificate_a).error ==
            RequestError::CertificateProvenanceMismatch);
 
-    QualityCertificateArtifact tampered = certificate;
+    QualityCertificateArtifact substituted_artifact = certificate_a;
+    substituted_artifact.certificate_sha256 = std::string(64U, 'b');
+    assert(validate_certified_operation_request(certified, substituted_artifact).error ==
+           RequestError::InvalidCertificateArtifact);
+
+    QualityCertificateArtifact tampered = certificate_a;
     tampered.canonical_bytes.push_back(static_cast<std::uint8_t>('x'));
     assert(validate_certified_operation_request(certified, tampered).error == RequestError::InvalidCertificateArtifact);
 
-    QualityCertificateArtifact malformed = certificate;
+    QualityCertificateArtifact malformed = certificate_a;
     malformed.certificate_sha256 = "not-a-digest";
     assert(validate_certified_operation_request(certified, malformed).error == RequestError::InvalidCertificateArtifact);
 
     CertifiedOperationRequest wrong_operation = certified;
     wrong_operation.request.operation = Operation::Version;
-    assert(validate_certified_operation_request(wrong_operation, certificate).error == RequestError::UnsupportedOperation);
+    assert(validate_certified_operation_request(wrong_operation, certificate_a).error == RequestError::UnsupportedOperation);
 
     return 0;
 }
