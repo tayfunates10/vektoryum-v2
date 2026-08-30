@@ -101,6 +101,25 @@ RequestValidation validate_certified_operation_request(
     return {};
 }
 
+CertifiedOperationResponse execute_certified_operation(
+    const CertifiedOperationRequest& request,
+    const certification::QualityCertificateArtifact& certificate,
+    const RequestLimits& limits) {
+    const RequestValidation validation = validate_certified_operation_request(request, certificate, limits);
+    const bool success = validation.ok();
+    return {
+        ResponseEnvelope{
+            std::string(stable_schema_version),
+            request.request.request_id,
+            request.request.operation,
+            success ? ResponseStatus::Success : ResponseStatus::Error,
+            success ? ExitCode::Success : ExitCode::Data,
+            validation.error,
+        },
+        success ? certificate.certificate_sha256 : std::string{},
+    };
+}
+
 std::string_view operation_name(Operation operation) noexcept {
     switch (operation) {
         case Operation::Unspecified:
@@ -182,6 +201,14 @@ std::string canonical_response_report(const ResponseEnvelope& response) {
     stream << "status=" << response_status_name(response.status) << '\n';
     stream << "exit_code=" << static_cast<int>(response.exit_code) << '\n';
     stream << "error=" << request_error_name(response.error) << '\n';
+    return stream.str();
+}
+
+std::string canonical_certified_response_report(const CertifiedOperationResponse& response) {
+    std::ostringstream stream;
+    stream.imbue(std::locale::classic());
+    stream << canonical_response_report(response.response);
+    stream << "certificate_sha256=" << response.certificate_sha256 << '\n';
     return stream.str();
 }
 
