@@ -1,5 +1,6 @@
 #include "vektoryum/io/raster_decode.hpp"
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
@@ -27,6 +28,83 @@ void write_u32_le(std::vector<std::uint8_t>& bytes, std::size_t offset, std::uin
     bytes[offset + 1U] = static_cast<std::uint8_t>((value >> 8U) & 0xffU);
     bytes[offset + 2U] = static_cast<std::uint8_t>((value >> 16U) & 0xffU);
     bytes[offset + 3U] = static_cast<std::uint8_t>((value >> 24U) & 0xffU);
+}
+
+void append_u32_be(std::vector<std::uint8_t>& bytes, std::uint32_t value) {
+    bytes.push_back(static_cast<std::uint8_t>((value >> 24U) & 0xffU));
+    bytes.push_back(static_cast<std::uint8_t>((value >> 16U) & 0xffU));
+    bytes.push_back(static_cast<std::uint8_t>((value >> 8U) & 0xffU));
+    bytes.push_back(static_cast<std::uint8_t>(value & 0xffU));
+}
+
+[[nodiscard]] std::uint32_t crc32_update(std::uint32_t crc, std::uint8_t value) noexcept {
+    crc ^= static_cast<std::uint32_t>(value);
+    for (unsigned bit = 0U; bit < 8U; ++bit) {
+        const std::uint32_t mask = 0U - (crc & 1U);
+        crc = (crc >> 1U) ^ (0xedb88320U & mask);
+    }
+    return crc;
+}
+
+[[nodiscard]] std::uint32_t adler32(std::span<const std::uint8_t> data) noexcept {
+    constexpr std::uint32_t modulus = 65521U;
+    std::uint32_t a = 1U;
+    std::uint32_t b = 0U;
+    for (const std::uint8_t value : data) {
+        a = (a + static_cast<std::uint32_t>(value)) % modulus;
+        b = (b + a) % modulus;
+    }
+    return (b << 16U) | a;
+}
+
+void append_png_chunk(
+    std::vector<std::uint8_t>& png,
+    const std::array<std::uint8_t, 4U>& type,
+    std::span<const std::uint8_t> data) {
+    append_u32_be(png, static_cast<std::uint32_t>(data.size()));
+    std::uint32_t crc = 0xffffffffU;
+    for (const std::uint8_t value : type) {
+        png.push_back(value);
+        crc = crc32_update(crc, value);
+    }
+    for (const std::uint8_t value : data) {
+        png.push_back(value);
+        crc = crc32_update(crc, value);
+    }
+    append_u32_be(png, crc ^ 0xffffffffU);
+}
+
+[[nodiscard]] std::vector<std::uint8_t> make_rgba_png() {
+    std::vector<std::uint8_t> png{0x89U, 0x50U, 0x4eU, 0x47U, 0x0dU, 0x0aU, 0x1aU, 0x0aU};
+
+    std::vector<std::uint8_t> ihdr;
+    append_u32_be(ihdr, 2U);
+    append_u32_be(ihdr, 1U);
+    ihdr.push_back(8U);
+    ihdr.push_back(6U);
+    ihdr.push_back(0U);
+    ihdr.push_back(0U);
+    ihdr.push_back(0U);
+    append_png_chunk(png, {0x49U, 0x48U, 0x44U, 0x52U}, ihdr);
+
+    const std::vector<std::uint8_t> filtered{
+        0U,
+        12U, 34U, 56U, 78U,
+        90U, 123U, 210U, 255U,
+    };
+    std::vector<std::uint8_t> zlib{0x78U, 0x01U, 0x01U};
+    const std::uint16_t length = static_cast<std::uint16_t>(filtered.size());
+    const std::uint16_t inverse = static_cast<std::uint16_t>(length ^ 0xffffU);
+    zlib.push_back(static_cast<std::uint8_t>(length & 0xffU));
+    zlib.push_back(static_cast<std::uint8_t>((length >> 8U) & 0xffU));
+    zlib.push_back(static_cast<std::uint8_t>(inverse & 0xffU));
+    zlib.push_back(static_cast<std::uint8_t>((inverse >> 8U) & 0xffU));
+    zlib.insert(zlib.end(), filtered.begin(), filtered.end());
+    append_u32_be(zlib, adler32(filtered));
+    append_png_chunk(png, {0x49U, 0x44U, 0x41U, 0x54U}, zlib);
+
+    append_png_chunk(png, {0x49U, 0x45U, 0x4eU, 0x44U}, std::span<const std::uint8_t>{});
+    return png;
 }
 
 void write_ifd_entry(
@@ -91,6 +169,27 @@ void write_ifd_entry(
 int main() {
     using namespace vektoryum;
 
+    const auto png_bytes = make_rgba_png();
+    const io::RasterDecodeResult png = io::decode_raster(io::RasterFormat::Png, png_bytes);
+    require(png.ok(), "baseline stored-deflate RGBA PNG must decode");
+    require(png.image.spec.width == 2U && png.image.spec.height == 1U, "decoded PNG dimensions must match IHDR");
+    require(png.image.spec.layout == core::PixelLayout::RGBA, "PNG decode must normalize to canonical RGBA");
+    require(png.image.spec.channel_type == core::ChannelType::UInt8, "PNG decode must normalize to UInt8");
+    require(png.image.spec.transfer == core::TransferFunction::SRGB, "PNG decode must expose canonical sRGB transfer");
+    require(png.image.spec.alpha == core::AlphaMode::Straight, "PNG alpha must remain straight");
+    require(png.image.rgba8 == std::vector<std::uint8_t>({12U, 34U, 56U, 78U, 90U, 123U, 210U, 255U}),
+            "PNG RGBA pixels must decode byte-exactly");
+    const io::RasterDecodeResult png_repeat = io::decode_raster(io::RasterFormat::Png, png_bytes);
+    require(png_repeat.ok() && png_repeat.image.rgba8 == png.image.rgba8,
+            "identical PNG input must decode deterministically");
+
+    auto bad_png_crc = png_bytes;
+    bad_png_crc.back() ^= 0x01U;
+    require(io::decode_raster(io::RasterFormat::Png, bad_png_crc).error == io::RasterDecodeError::MalformedContainer,
+            "PNG CRC substitution must fail closed");
+    require(io::decode_raster(io::RasterFormat::Png, std::span<const std::uint8_t>{}).error == io::RasterDecodeError::MalformedContainer,
+            "empty PNG payload must fail closed as malformed input");
+
     const auto associated_bytes = make_rgba_tiff(1U, 1U);
     const io::RasterDecodeResult associated = io::decode_raster(io::RasterFormat::Tiff, associated_bytes);
     require(associated.ok(), "baseline uncompressed TIFF must decode");
@@ -132,8 +231,6 @@ int main() {
     require(io::decode_raster(io::RasterFormat::Tiff, malformed).error == io::RasterDecodeError::MalformedContainer,
             "short TIFF container must fail closed");
 
-    require(io::decode_raster(io::RasterFormat::Png, std::span<const std::uint8_t>{}).error == io::RasterDecodeError::UnsupportedFormat,
-            "formats without a pixel decoder must not be falsely accepted");
     require(std::string_view(io::raster_decode_error_name(io::RasterDecodeError::UnsupportedFeature)) == "unsupported_feature",
             "decode error names must be stable");
 
