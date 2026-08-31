@@ -73,6 +73,7 @@ struct IfdEntry {
 
 [[nodiscard]] bool png_has_invalid_srgb(std::span<const std::uint8_t> bytes) noexcept {
     constexpr std::size_t signature_size = 8U;
+    constexpr std::uint32_t canonical_srgb_gamma = 45455U;
     if (bytes.size() < signature_size) {
         return false;
     }
@@ -89,6 +90,11 @@ struct IfdEntry {
         const bool is_srgb = bytes[offset + 4U] == 's' && bytes[offset + 5U] == 'R' &&
                              bytes[offset + 6U] == 'G' && bytes[offset + 7U] == 'B';
         if (is_srgb && (length != 1U || bytes[data_offset] > 3U)) {
+            return true;
+        }
+        const bool is_gamma = bytes[offset + 4U] == 'g' && bytes[offset + 5U] == 'A' &&
+                              bytes[offset + 6U] == 'M' && bytes[offset + 7U] == 'A';
+        if (is_gamma && (length != 4U || read_be32_unchecked(bytes, data_offset) != canonical_srgb_gamma)) {
             return true;
         }
         offset = data_offset + length + 4U;
