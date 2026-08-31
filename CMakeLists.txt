@@ -24,6 +24,7 @@ add_library(vektoryum_core STATIC
     src/hybrid/hybrid_output_contract.cpp
     src/hybrid/hybrid_plan.cpp
     src/io/jpeg_decode.cpp
+    src/io/jpeg_color_decode.cpp
     src/io/limits.cpp
     src/io/png_decode.cpp
     src/io/raster_decode.cpp
