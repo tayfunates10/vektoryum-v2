@@ -2,7 +2,13 @@
 
 #include <array>
 #include <cstdint>
+#include <cstdlib>
+#include <filesystem>
+#include <fstream>
 #include <iostream>
+#include <iterator>
+#include <string>
+#include <vector>
 
 namespace {
 
@@ -14,9 +20,22 @@ bool expect(bool condition, const char* message) {
     return true;
 }
 
+[[nodiscard]] std::string quote(const std::filesystem::path& path) {
+    return std::string{"\""} + path.string() + "\"";
+}
+
+[[nodiscard]] int run_command(const std::string& command) {
+#ifdef _WIN32
+    const std::string wrapped = std::string{"\""} + command + "\"";
+    return std::system(wrapped.c_str());
+#else
+    return std::system(command.c_str());
+#endif
+}
+
 }  // namespace
 
-int main() {
+int main(int argc, char** argv) {
     // Real 1x1 lossless WebP (VP8L) with one RGBA pixel: (12, 34, 56, 78).
     constexpr std::array<std::uint8_t, 38U> webp{{
         0x52U, 0x49U, 0x46U, 0x46U, 0x1eU, 0x00U, 0x00U, 0x00U,
@@ -50,5 +69,61 @@ int main() {
         return 1;
     }
 
+    if (!expect(argc >= 1, "test executable path must be available")) {
+        return 1;
+    }
+    std::filesystem::path cli = std::filesystem::path(argv[0]).parent_path() / "vektoryum_cli";
+#ifdef _WIN32
+    cli += ".exe";
+#endif
+    if (!expect(std::filesystem::exists(cli), "CLI executable must exist beside WebP acceptance test")) {
+        return 1;
+    }
+
+    const auto dir = std::filesystem::temp_directory_path() / "vektoryum-r2-webp-cli";
+    std::error_code ec;
+    std::filesystem::remove_all(dir, ec);
+    ec.clear();
+    if (!expect(std::filesystem::create_directories(dir, ec), "temporary WebP CLI directory must be created")) {
+        return 1;
+    }
+    const auto input_path = dir / "alpha.webp";
+    const auto output_path = dir / "alpha.pam";
+    {
+        std::ofstream out(input_path, std::ios::binary | std::ios::trunc);
+        if (!expect(static_cast<bool>(out), "WebP CLI fixture must open")) {
+            return 1;
+        }
+        out.write(reinterpret_cast<const char*>(webp.data()), static_cast<std::streamsize>(webp.size()));
+        if (!expect(static_cast<bool>(out), "WebP CLI fixture must write completely")) {
+            return 1;
+        }
+    }
+
+    const std::string command = quote(cli) + " --convert " + quote(input_path) + " " + quote(output_path);
+    if (!expect(run_command(command) == 0, "CLI --convert must accept real WebP")) {
+        return 1;
+    }
+    std::ifstream in(output_path, std::ios::binary);
+    if (!expect(static_cast<bool>(in), "WebP CLI PAM output must exist")) {
+        return 1;
+    }
+    const std::vector<std::uint8_t> actual(
+        std::istreambuf_iterator<char>(in),
+        std::istreambuf_iterator<char>());
+    const std::string header = "P7\nWIDTH 1\nHEIGHT 1\nDEPTH 4\nMAXVAL 255\nTUPLTYPE RGB_ALPHA\nENDHDR\n";
+    if (!expect(actual.size() == header.size() + 4U, "WebP CLI PAM size must be canonical")) {
+        return 1;
+    }
+    if (!expect(std::equal(header.begin(), header.end(), actual.begin()), "WebP CLI PAM header must be canonical")) {
+        return 1;
+    }
+    if (!expect(actual[header.size()] == 12U && actual[header.size() + 1U] == 34U &&
+                    actual[header.size() + 2U] == 56U && actual[header.size() + 3U] == 78U,
+                "WebP CLI PAM pixels must preserve RGBA and alpha")) {
+        return 1;
+    }
+
+    std::filesystem::remove_all(dir, ec);
     return 0;
 }
