@@ -203,6 +203,15 @@ void write_binary(const std::filesystem::path& path, std::span<const std::uint8_
     return std::string{"\""} + path.string() + "\"";
 }
 
+[[nodiscard]] int run_command(const std::string& command) {
+#ifdef _WIN32
+    const std::string wrapped = std::string{"\""} + command + "\"";
+    return std::system(wrapped.c_str());
+#else
+    return std::system(command.c_str());
+#endif
+}
+
 void run_case(
     const std::filesystem::path& cli,
     const std::filesystem::path& dir,
@@ -216,7 +225,7 @@ void run_case(
     const auto output_path = dir / (std::string(stem) + ".pam");
     write_binary(input_path, input);
     const std::string command = quote(cli) + " --convert " + quote(input_path) + " " + quote(output_path);
-    require(std::system(command.c_str()) == 0, "CLI --convert must succeed for accepted raster fixture");
+    require(run_command(command) == 0, "CLI --convert must succeed for accepted raster fixture");
     const auto actual = read_binary(output_path);
     const std::string header = "P7\nWIDTH " + std::to_string(width) + "\nHEIGHT " + std::to_string(height) +
                                "\nDEPTH 4\nMAXVAL 255\nTUPLTYPE RGB_ALPHA\nENDHDR\n";
