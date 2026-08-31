@@ -108,9 +108,9 @@ int main(int argc, char** argv) {
     if (!expect(static_cast<bool>(in), "WebP CLI PAM output must exist")) {
         return 1;
     }
-    const std::vector<std::uint8_t> actual(
+    const std::vector<std::uint8_t> actual{
         std::istreambuf_iterator<char>(in),
-        std::istreambuf_iterator<char>());
+        std::istreambuf_iterator<char>()};
     const std::string header = "P7\nWIDTH 1\nHEIGHT 1\nDEPTH 4\nMAXVAL 255\nTUPLTYPE RGB_ALPHA\nENDHDR\n";
     if (!expect(actual.size() == header.size() + 4U, "WebP CLI PAM size must be canonical")) {
         return 1;
