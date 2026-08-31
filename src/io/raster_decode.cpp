@@ -210,12 +210,17 @@ struct IfdEntry {
     const auto height = scalar_for_tag(bytes, entries, 257U, order);
     const auto compression = scalar_for_tag(bytes, entries, 259U, order);
     const auto photometric = scalar_for_tag(bytes, entries, 262U, order);
-    const auto samples = scalar_for_tag(bytes, entries, 277U, order);
+    // SamplesPerPixel defaults to 1 when the tag is absent, which is what
+    // encoders commonly do for greyscale images.
+    const std::uint32_t samples = scalar_for_tag(bytes, entries, 277U, order).value_or(1U);
     const auto strip_offsets = values_for_tag(bytes, entries, 273U, order);
     const auto strip_byte_counts = values_for_tag(bytes, entries, 279U, order);
     const auto bits = values_for_tag(bytes, entries, 258U, order);
     if (!width.has_value() || !height.has_value() || !compression.has_value() || !photometric.has_value() ||
-        !samples.has_value() || !strip_offsets.has_value() || !strip_byte_counts.has_value() || !bits.has_value()) {
+        !strip_offsets.has_value() || !strip_byte_counts.has_value() || !bits.has_value()) {
+        return fail(RasterDecodeError::MalformedContainer);
+    }
+    if (samples == 0U) {
         return fail(RasterDecodeError::MalformedContainer);
     }
 
@@ -239,10 +244,7 @@ struct IfdEntry {
     if (planar.has_value() && *planar != 1U) {
         return fail(RasterDecodeError::UnsupportedFeature);
     }
-    if (strip_offsets->size() != 1U || strip_byte_counts->size() != 1U) {
-        return fail(RasterDecodeError::UnsupportedFeature);
-    }
-    if (bits->size() != static_cast<std::size_t>(*samples)) {
+    if (bits->size() != static_cast<std::size_t>(samples)) {
         return fail(RasterDecodeError::UnsupportedFeature);
     }
     for (const std::uint32_t bit_depth : *bits) {
@@ -253,11 +255,11 @@ struct IfdEntry {
 
     bool grayscale = false;
     bool associated_alpha = false;
-    if (*photometric == 1U && *samples == 1U) {
+    if (*photometric == 1U && samples == 1U) {
         grayscale = true;
-    } else if (*photometric == 2U && *samples == 3U) {
+    } else if (*photometric == 2U && samples == 3U) {
         grayscale = false;
-    } else if (*photometric == 2U && *samples == 4U) {
+    } else if (*photometric == 2U && samples == 4U) {
         const auto extras = values_for_tag(bytes, entries, 338U, order);
         if (!extras.has_value() || extras->size() != 1U || ((*extras)[0U] != 1U && (*extras)[0U] != 2U)) {
             return fail(RasterDecodeError::UnsupportedFeature);
@@ -267,17 +269,33 @@ struct IfdEntry {
         return fail(RasterDecodeError::UnsupportedFeature);
     }
 
-    const std::size_t sample_count = static_cast<std::size_t>(*samples);
+    const std::size_t sample_count = static_cast<std::size_t>(samples);
     if (pixel_count > std::numeric_limits<std::size_t>::max() / sample_count) {
         return fail(RasterDecodeError::PixelBudgetExceeded);
     }
-    const std::size_t expected_bytes = pixel_count * sample_count;
-    if ((*strip_byte_counts)[0U] != expected_bytes) {
-        return fail(RasterDecodeError::UnsupportedFeature);
+
+    // Pixels are stored in strips of RowsPerStrip rows each, the last one short
+    // where the height does not divide evenly. RowsPerStrip defaults to the whole
+    // image, and every strip must describe exactly the bytes its rows occupy.
+    const std::size_t row_bytes = width_size * sample_count;
+    const std::uint32_t rows_per_strip =
+        scalar_for_tag(bytes, entries, 278U, order).value_or(*height);
+    if (rows_per_strip == 0U) {
+        return fail(RasterDecodeError::MalformedContainer);
     }
-    const std::size_t pixel_offset = static_cast<std::size_t>((*strip_offsets)[0U]);
-    if (!checked_range(pixel_offset, expected_bytes, bytes.size())) {
-        return fail(RasterDecodeError::TruncatedPixelData);
+    const std::size_t rows_in_strip = static_cast<std::size_t>(rows_per_strip);
+    const std::size_t strip_count = (height_size + rows_in_strip - 1U) / rows_in_strip;
+    if (strip_offsets->size() != strip_count || strip_byte_counts->size() != strip_count) {
+        return fail(RasterDecodeError::MalformedContainer);
+    }
+    for (std::size_t strip = 0U; strip < strip_count; ++strip) {
+        const std::size_t rows = std::min(rows_in_strip, height_size - strip * rows_in_strip);
+        if (static_cast<std::size_t>((*strip_byte_counts)[strip]) != rows * row_bytes) {
+            return fail(RasterDecodeError::UnsupportedFeature);
+        }
+        if (!checked_range(static_cast<std::size_t>((*strip_offsets)[strip]), rows * row_bytes, bytes.size())) {
+            return fail(RasterDecodeError::TruncatedPixelData);
+        }
     }
     if (pixel_count > std::numeric_limits<std::size_t>::max() / 4U) {
         return fail(RasterDecodeError::PixelBudgetExceeded);
@@ -294,7 +312,11 @@ struct IfdEntry {
     decoded.rgba8.resize(pixel_count * 4U);
 
     for (std::size_t i = 0; i < pixel_count; ++i) {
-        const std::size_t source = pixel_offset + i * sample_count;
+        const std::size_t row = i / width_size;
+        const std::size_t strip = row / rows_in_strip;
+        const std::size_t row_in_strip = row - strip * rows_in_strip;
+        const std::size_t source = static_cast<std::size_t>((*strip_offsets)[strip]) +
+                                   row_in_strip * row_bytes + (i - row * width_size) * sample_count;
         const std::size_t target = i * 4U;
         if (grayscale) {
             const std::uint8_t value = bytes[source];

@@ -1,10 +1,19 @@
+#include "jpeg_baseline_fixtures.hpp"
+#include "tiff_baseline_fixtures.hpp"
+#include "webp_lossless_fixtures.hpp"
+
+#include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <iterator>
+#include <functional>
+#include <limits>
 #include <span>
 #include <string>
 #include <string_view>
@@ -235,6 +244,128 @@ void run_case(
             "PAM output pixels must match canonical decoded RGBA8 bytes");
 }
 
+
+[[nodiscard]] std::uint8_t byte_of(std::uint32_t value) noexcept {
+    return static_cast<std::uint8_t>(value & 0xffU);
+}
+
+using PixelSource = std::function<std::array<std::uint8_t, 4U>(std::uint32_t, std::uint32_t)>;
+
+[[nodiscard]] std::vector<std::uint8_t> render(std::uint32_t width, std::uint32_t height, const PixelSource& pixel) {
+    std::vector<std::uint8_t> rgba;
+    rgba.reserve(static_cast<std::size_t>(width) * height * 4U);
+    for (std::uint32_t y = 0U; y < height; ++y) {
+        for (std::uint32_t x = 0U; x < width; ++x) {
+            const std::array<std::uint8_t, 4U> value = pixel(x, y);
+            rgba.insert(rgba.end(), value.begin(), value.end());
+        }
+    }
+    return rgba;
+}
+
+[[nodiscard]] std::string canonical_header(std::uint32_t width, std::uint32_t height) {
+    return "P7\nWIDTH " + std::to_string(width) + "\nHEIGHT " + std::to_string(height) +
+           "\nDEPTH 4\nMAXVAL 255\nTUPLTYPE RGB_ALPHA\nENDHDR\n";
+}
+
+// Runs the real CLI over a file written by a reference encoder and returns the
+// PAM pixel payload after checking the canonical header, the size, and that a
+// second run produces byte-identical output.
+[[nodiscard]] std::vector<std::uint8_t> convert_and_read(
+    const std::filesystem::path& cli,
+    const std::filesystem::path& dir,
+    std::string_view stem,
+    std::string_view extension,
+    std::span<const std::uint8_t> input,
+    std::uint32_t width,
+    std::uint32_t height) {
+    const auto input_path = dir / (std::string(stem) + std::string(extension));
+    const auto output_path = dir / (std::string(stem) + ".pam");
+    write_binary(input_path, input);
+    const std::string command = quote(cli) + " --convert " + quote(input_path) + " " + quote(output_path);
+    require(run_command(command) == 0, "CLI --convert must succeed for an accepted raster fixture");
+
+    const auto actual = read_binary(output_path);
+    const std::string header = canonical_header(width, height);
+    const std::size_t expected_bytes = static_cast<std::size_t>(width) * height * 4U;
+    require(actual.size() == header.size() + expected_bytes,
+            "PAM output size must match the canonical header plus RGBA8 pixels");
+    require(std::equal(header.begin(), header.end(), actual.begin()),
+            "PAM output header must be canonical and deterministic");
+
+    const auto repeat_path = dir / (std::string(stem) + ".repeat.pam");
+    const std::string repeat = quote(cli) + " --convert " + quote(input_path) + " " + quote(repeat_path);
+    require(run_command(repeat) == 0, "CLI --convert must succeed on a repeated run");
+    require(read_binary(repeat_path) == actual, "CLI --convert must be deterministic across runs");
+
+    return std::vector<std::uint8_t>(actual.begin() + static_cast<std::ptrdiff_t>(header.size()), actual.end());
+}
+
+// Lossless formats must come back out of the CLI exactly as they went in.
+void run_lossless_case(
+    const std::filesystem::path& cli,
+    const std::filesystem::path& dir,
+    std::string_view stem,
+    std::string_view extension,
+    std::span<const std::uint8_t> input,
+    std::uint32_t width,
+    std::uint32_t height,
+    const PixelSource& pixel) {
+    const auto payload = convert_and_read(cli, dir, stem, extension, input, width, height);
+    require(payload == render(width, height, pixel),
+            "PAM pixels must reproduce the image the encoder was given");
+}
+
+// JPEG is lossy, so its CLI output is held to the same measured fidelity gate
+// the decoder acceptance uses: a PSNR floor plus a per-channel bound.
+void run_lossy_case(
+    const std::filesystem::path& cli,
+    const std::filesystem::path& dir,
+    std::string_view stem,
+    std::string_view extension,
+    std::span<const std::uint8_t> input,
+    std::uint32_t width,
+    std::uint32_t height,
+    double psnr_floor,
+    int channel_bound,
+    const PixelSource& pixel) {
+    const auto payload = convert_and_read(cli, dir, stem, extension, input, width, height);
+    const auto expected = render(width, height, pixel);
+    double squared_error = 0.0;
+    int worst = 0;
+    const std::size_t pixel_count = static_cast<std::size_t>(width) * height;
+    for (std::size_t i = 0U; i < pixel_count; ++i) {
+        require(payload[i * 4U + 3U] == 255U, "a JPEG conversion must stay opaque");
+        for (std::size_t channel = 0U; channel < 3U; ++channel) {
+            const int difference = static_cast<int>(payload[i * 4U + channel]) -
+                                   static_cast<int>(expected[i * 4U + channel]);
+            squared_error += static_cast<double>(difference) * static_cast<double>(difference);
+            worst = std::max(worst, std::abs(difference));
+        }
+    }
+    const double mean_squared_error = squared_error / static_cast<double>(pixel_count * 3U);
+    const double psnr = mean_squared_error == 0.0
+                            ? std::numeric_limits<double>::infinity()
+                            : 10.0 * std::log10(255.0 * 255.0 / mean_squared_error);
+    require(psnr >= psnr_floor, "converted JPEG PAM must meet its PSNR floor against the source image");
+    require(worst <= channel_bound, "converted JPEG PAM must stay inside its per-channel bound");
+}
+
+void run_rejected_case(
+    const std::filesystem::path& cli,
+    const std::filesystem::path& dir,
+    std::string_view stem,
+    std::string_view extension,
+    std::span<const std::uint8_t> input,
+    std::string_view message) {
+    const auto input_path = dir / (std::string(stem) + std::string(extension));
+    const auto output_path = dir / (std::string(stem) + ".pam");
+    write_binary(input_path, input);
+    const std::string command = quote(cli) + " --convert " + quote(input_path) + " " + quote(output_path);
+    require(run_command(command) != 0, message);
+    require(!std::filesystem::exists(output_path), "a rejected conversion must not leave an output file");
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -257,6 +388,82 @@ int main(int argc, char** argv) {
     const auto tiff = make_rgba_tiff();
     const std::array<std::uint8_t, 8U> tiff_pixels{64U, 32U, 16U, 128U, 10U, 20U, 30U, 255U};
     run_case(cli, dir, "rgba", ".tiff", tiff, tiff_pixels, 2U, 1U);
+
+    // Every supported format, driven end to end through the real CLI with
+    // inputs produced by reference encoders.
+    using namespace vektoryum_test_fixtures;
+
+    run_lossless_case(cli, dir, "real_alpha", ".webp", webp_alpha_fade, 24U, 16U,
+                      [](std::uint32_t x, std::uint32_t y) {
+                          return std::array<std::uint8_t, 4U>{
+                              byte_of(x * 9U), byte_of(y * 17U), byte_of((x + y) * 5U),
+                              byte_of((x * 255U) / 23U)};
+                      });
+    run_lossless_case(cli, dir, "real_palette", ".webp", webp_two_color, 40U, 8U,
+                      [](std::uint32_t x, std::uint32_t y) {
+                          return ((x ^ y) & 1U) == 0U
+                                     ? std::array<std::uint8_t, 4U>{255U, 0U, 0U, 255U}
+                                     : std::array<std::uint8_t, 4U>{0U, 0U, 255U, 128U};
+                      });
+    run_lossless_case(cli, dir, "real_gray", ".tiff", tiff_gray_13x9, 13U, 9U,
+                      [](std::uint32_t x, std::uint32_t y) {
+                          const std::uint8_t v = byte_of(x * 11U + y * 7U);
+                          return std::array<std::uint8_t, 4U>{v, v, v, 255U};
+                      });
+    run_lossless_case(cli, dir, "real_rgb", ".tiff", tiff_rgb_13x9, 13U, 9U,
+                      [](std::uint32_t x, std::uint32_t y) {
+                          return std::array<std::uint8_t, 4U>{
+                              byte_of(x * 9U), byte_of(y * 13U), byte_of((x + y) * 5U), 255U};
+                      });
+    run_lossless_case(cli, dir, "real_rgba", ".tiff", tiff_rgba_13x9, 13U, 9U,
+                      [](std::uint32_t x, std::uint32_t y) {
+                          return std::array<std::uint8_t, 4U>{
+                              byte_of(x * 9U), byte_of(y * 13U), byte_of((x + y) * 5U),
+                              byte_of((x * 255U) / 12U)};
+                      });
+
+    const auto gray_ramp = [](std::uint32_t x, std::uint32_t y) {
+        const auto v = static_cast<std::uint8_t>(std::min<std::uint32_t>(16U + x * 6U + y * 4U, 255U));
+        return std::array<std::uint8_t, 4U>{v, v, v, 255U};
+    };
+    const auto smooth_color = [](std::uint32_t x, std::uint32_t y) {
+        return std::array<std::uint8_t, 4U>{
+            static_cast<std::uint8_t>(std::min<std::uint32_t>(40U + x * 5U, 255U)),
+            static_cast<std::uint8_t>(std::min<std::uint32_t>(30U + y * 7U, 255U)),
+            static_cast<std::uint8_t>(std::min<std::uint32_t>(20U + (x + y) * 3U, 255U)),
+            255U};
+    };
+    run_lossy_case(cli, dir, "real_gray", ".jpg", jpeg_gray_ramp_grayscale, 24U, 16U, 60.0, 0, gray_ramp);
+    run_lossy_case(cli, dir, "real_444", ".jpg", jpeg_smooth_color_444, 32U, 24U, 46.0, 5, smooth_color);
+    run_lossy_case(cli, dir, "real_422", ".jpg", jpeg_smooth_color_422, 32U, 24U, 42.0, 6, smooth_color);
+    run_lossy_case(cli, dir, "real_420", ".jpg", jpeg_smooth_color_420, 32U, 24U, 39.0, 8, smooth_color);
+
+    // Inputs the pipeline cannot honour must exit non-zero and write nothing.
+    {
+        std::vector<std::uint8_t> truncated(png.begin(), png.end() - 6);
+        run_rejected_case(cli, dir, "truncated", ".png", truncated,
+                          "CLI --convert must reject a truncated PNG");
+    }
+    {
+        const std::string text = "this is not an image";
+        const std::vector<std::uint8_t> bytes(text.begin(), text.end());
+        run_rejected_case(cli, dir, "not_an_image", ".png", bytes,
+                          "CLI --convert must reject an unrecognised format");
+    }
+    {
+        const std::vector<std::uint8_t> lossy{
+            'R', 'I', 'F', 'F', 0x14U, 0x00U, 0x00U, 0x00U, 'W', 'E', 'B', 'P',
+            'V', 'P', '8', ' ', 0x08U, 0x00U, 0x00U, 0x00U,
+            0x00U, 0x00U, 0x00U, 0x9dU, 0x01U, 0x2aU, 0x01U, 0x00U};
+        run_rejected_case(cli, dir, "lossy", ".webp", lossy,
+                          "CLI --convert must reject a lossy WebP rather than guess at it");
+    }
+    {
+        const auto missing = dir / "does_not_exist.png";
+        const auto output_path = dir / "missing.pam";
+        const std::string command = quote(cli) + " --convert " + quote(missing) + " " + quote(output_path);
+        require(run_command(command) != 0, "CLI --convert must reject a missing input file");
+    }
 
     std::filesystem::remove_all(dir, ec);
     std::cout << "R2 CLI convert matrix fixtures passed\n";
