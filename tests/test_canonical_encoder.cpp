@@ -5,8 +5,11 @@
 #include <iostream>
 #include <string>
 
+#include "vektoryum/ml/artifact_digest.hpp"
+
 namespace {
 
+using vektoryum::exporting::ExportArtifactError;
 using vektoryum::exporting::ExportFormat;
 using vektoryum::exporting::ExportRequest;
 using vektoryum::hybrid::HybridOutputManifest;
@@ -86,6 +89,22 @@ void require_contains(const std::string& text, const std::string& token, const s
     }
 }
 
+vektoryum::exporting::EncodedExportArtifact malformed_copy(
+    const vektoryum::exporting::EncodedExportArtifact& artifact,
+    const std::string& token,
+    const std::string& replacement) {
+    std::string text{artifact.bytes.begin(), artifact.bytes.end()};
+    const std::size_t position = text.find(token);
+    if (position == std::string::npos) {
+        fail("malformation target token was not present");
+    }
+    text.replace(position, token.size(), replacement);
+    auto malformed = artifact;
+    malformed.bytes.assign(text.begin(), text.end());
+    malformed.output_sha256 = vektoryum::ml::sha256_hex(malformed.bytes);
+    return malformed;
+}
+
 }  // namespace
 
 int main() {
@@ -124,27 +143,37 @@ int main() {
         }
 
         const std::string text = artifact_text(geometry);
+        vektoryum::exporting::EncodedExportArtifact malformed;
         switch (format) {
             case ExportFormat::Svg:
                 require_contains(text, "<path d=\"M 10.000000 10.000000", "SVG contains no reconstructed path geometry");
                 require_contains(text, " C ", "SVG lost cubic Bezier geometry");
                 require_contains(text, "fill-rule=\"evenodd\"", "SVG lost topology fill rule");
+                malformed = malformed_copy(geometry.artifact, "fill-rule=\"evenodd\"", "fill-rule=\"nonzero\"");
                 break;
             case ExportFormat::Pdf:
                 require_contains(text, "xref\n", "PDF has no xref table");
                 require_contains(text, "trailer\n", "PDF has no trailer dictionary");
                 require_contains(text, " c\n", "PDF content stream lost cubic Bezier geometry");
                 require_contains(text, "f*\n", "PDF content stream lost even-odd fill semantics");
+                malformed = malformed_copy(geometry.artifact, "xref\n", "xrex\n");
                 break;
             case ExportFormat::Eps:
                 require_contains(text, "curveto\n", "EPS lost cubic Bezier geometry");
                 require_contains(text, "eofill\n", "EPS lost even-odd fill semantics");
+                malformed = malformed_copy(geometry.artifact, "%%EndComments\n", "%%BadComments\n");
                 break;
             case ExportFormat::Dxf:
                 require_contains(text, "2\nENTITIES\n", "DXF has no ENTITIES section");
                 require_contains(text, "0\nLINE\n", "DXF lost linear geometry");
                 require_contains(text, "0\nSPLINE\n", "DXF lost cubic geometry");
+                malformed = malformed_copy(geometry.artifact, "2\nENTITIES\n", "2\nENTITIEZ\n");
                 break;
+        }
+        const auto malformed_validation = vektoryum::exporting::validate_encoded_export_artifact(
+            request, source, malformed);
+        if (malformed_validation.error != ExportArtifactError::InvalidStructure) {
+            fail("R5 format-aware validator accepted a malformed geometry artifact");
         }
     }
 
