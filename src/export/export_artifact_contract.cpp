@@ -1,6 +1,7 @@
 #include "vektoryum/export/export_artifact_contract.hpp"
 
 #include <algorithm>
+#include <limits>
 #include <sstream>
 #include <string>
 
@@ -44,16 +45,104 @@ namespace {
     });
 }
 
+[[nodiscard]] std::string text_of(const std::vector<std::uint8_t>& bytes) {
+    return {bytes.begin(), bytes.end()};
+}
+
+[[nodiscard]] bool parse_decimal_at(const std::string& text, std::size_t begin, std::size_t& value) {
+    if (begin >= text.size() || text[begin] < '0' || text[begin] > '9') {
+        return false;
+    }
+    std::size_t parsed = 0U;
+    std::size_t cursor = begin;
+    while (cursor < text.size() && text[cursor] >= '0' && text[cursor] <= '9') {
+        const std::size_t digit = static_cast<std::size_t>(text[cursor] - '0');
+        if (parsed > (std::numeric_limits<std::size_t>::max() - digit) / 10U) {
+            return false;
+        }
+        parsed = parsed * 10U + digit;
+        ++cursor;
+    }
+    if (cursor >= text.size() || text[cursor] != '\n') {
+        return false;
+    }
+    value = parsed;
+    return true;
+}
+
+[[nodiscard]] bool geometry_svg_valid(const std::string& text) {
+    const std::size_t path = text.find("<path ");
+    if (path == std::string::npos) {
+        return true;
+    }
+    return text.find("viewBox=\"", 0U) != std::string::npos &&
+           text.find("d=\"", path) != std::string::npos &&
+           text.find("fill-rule=\"evenodd\"", path) != std::string::npos &&
+           text.find("/>\n", path) != std::string::npos;
+}
+
+[[nodiscard]] bool geometry_pdf_valid(const std::string& text) {
+    if (text.find("% Vektoryum geometry export\n") == std::string::npos) {
+        return true;
+    }
+    const std::size_t object = text.find("1 0 obj\n");
+    const std::size_t stream = text.find("stream\n");
+    const std::size_t endstream = text.find("endstream\n");
+    const std::size_t xref = text.find("xref\n");
+    const std::size_t trailer = text.find("trailer\n");
+    const std::string startxref_token = "startxref\n";
+    const std::size_t startxref = text.find(startxref_token);
+    if (object == std::string::npos || stream == std::string::npos || endstream == std::string::npos ||
+        xref == std::string::npos || trailer == std::string::npos || startxref == std::string::npos ||
+        !(object < stream && stream < endstream && endstream < xref && xref < trailer && trailer < startxref)) {
+        return false;
+    }
+    std::size_t declared_xref = 0U;
+    return parse_decimal_at(text, startxref + startxref_token.size(), declared_xref) && declared_xref == xref;
+}
+
+[[nodiscard]] bool geometry_eps_valid(const std::string& text) {
+    if (text.find("newpath\n") == std::string::npos && text.find("curveto\n") == std::string::npos) {
+        return true;
+    }
+    const std::size_t bounding_box = text.find("%%BoundingBox: ");
+    const std::size_t end_comments = text.find("%%EndComments\n");
+    const std::size_t newpath = text.find("newpath\n");
+    const std::size_t fill = text.find("eofill\n");
+    const std::size_t showpage = text.find("showpage\n");
+    return bounding_box != std::string::npos && end_comments != std::string::npos &&
+           newpath != std::string::npos && fill != std::string::npos && showpage != std::string::npos &&
+           bounding_box < end_comments && end_comments < newpath && newpath < fill && fill < showpage;
+}
+
+[[nodiscard]] bool geometry_dxf_valid(const std::string& text) {
+    const bool has_geometry = text.find("0\nLINE\n") != std::string::npos ||
+                              text.find("0\nSPLINE\n") != std::string::npos;
+    if (!has_geometry) {
+        return true;
+    }
+    const std::size_t header = text.find("2\nHEADER\n");
+    const std::size_t header_end = text.find("0\nENDSEC\n", header);
+    const std::size_t entities = text.find("2\nENTITIES\n", header_end);
+    const std::size_t entities_end = text.find("0\nENDSEC\n", entities);
+    return header != std::string::npos && header_end != std::string::npos &&
+           entities != std::string::npos && entities_end != std::string::npos &&
+           header < header_end && header_end < entities && entities < entities_end;
+}
+
 [[nodiscard]] bool structurally_valid(ExportFormat format, const std::vector<std::uint8_t>& bytes) {
+    const std::string text = text_of(bytes);
     switch (format) {
         case ExportFormat::Svg:
-            return starts_with(bytes, "<svg xmlns=\"http://www.w3.org/2000/svg\"") && ends_with(bytes, "</svg>\n");
+            return starts_with(bytes, "<svg xmlns=\"http://www.w3.org/2000/svg\"") &&
+                   ends_with(bytes, "</svg>\n") && geometry_svg_valid(text);
         case ExportFormat::Pdf:
-            return starts_with(bytes, "%PDF-1.7\n") && ends_with(bytes, "%%EOF\n");
+            return starts_with(bytes, "%PDF-1.7\n") && ends_with(bytes, "%%EOF\n") && geometry_pdf_valid(text);
         case ExportFormat::Eps:
-            return starts_with(bytes, "%!PS-Adobe-3.0 EPSF-3.0\n") && ends_with(bytes, "%%EOF\n");
+            return starts_with(bytes, "%!PS-Adobe-3.0 EPSF-3.0\n") &&
+                   ends_with(bytes, "%%EOF\n") && geometry_eps_valid(text);
         case ExportFormat::Dxf:
-            return starts_with(bytes, "0\nSECTION\n") && ends_with(bytes, "0\nEOF\n");
+            return starts_with(bytes, "0\nSECTION\n") && ends_with(bytes, "0\nEOF\n") && geometry_dxf_valid(text);
     }
     return false;
 }
