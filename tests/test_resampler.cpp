@@ -248,6 +248,64 @@ void test_premultiplied_alpha_edge_does_not_leak_hidden_rgb() {
     expect(premultiplied_constraint, "alpha-fringe regression gate: RGB remains bounded by alpha");
 }
 
+void test_visual_regression_is_axis_neutral() {
+    using namespace vektoryum::resample;
+    constexpr std::uint32_t width = 7U;
+    constexpr std::uint32_t height = 5U;
+    constexpr std::uint8_t channels = 3U;
+    FloatImage source{
+        width,
+        height,
+        channels,
+        std::vector<float>(static_cast<std::size_t>(width) * height * channels, 0.0F),
+    };
+
+    for (std::uint32_t y = 0U; y < height; ++y) {
+        for (std::uint32_t x = 0U; x < width; ++x) {
+            const bool foreground = (x >= 2U && x <= 5U && y >= 1U && y <= 3U) || (x == y + 1U);
+            source.pixels[source.index(x, y, 0U)] = foreground ? 1.0F : 0.05F;
+            source.pixels[source.index(x, y, 1U)] = foreground ? 0.20F : 0.75F;
+            source.pixels[source.index(x, y, 2U)] = foreground ? 0.05F : 0.30F;
+        }
+    }
+
+    FloatImage transposed{
+        height,
+        width,
+        channels,
+        std::vector<float>(static_cast<std::size_t>(width) * height * channels, 0.0F),
+    };
+    for (std::uint32_t y = 0U; y < height; ++y) {
+        for (std::uint32_t x = 0U; x < width; ++x) {
+            for (std::uint8_t channel = 0U; channel < channels; ++channel) {
+                transposed.pixels[transposed.index(y, x, channel)] = source.pixels[source.index(x, y, channel)];
+            }
+        }
+    }
+
+    const ResampleResult direct = resize(source, width * 8U, height * 8U, {Filter::Lanczos3, true});
+    const ResampleResult swapped = resize(transposed, height * 8U, width * 8U, {Filter::Lanczos3, true});
+    expect(direct.ok() && swapped.ok(), "visual-regression fixture 8x upscales succeed");
+    if (!direct.ok() || !swapped.ok()) {
+        return;
+    }
+
+    double maximum_axis_delta = 0.0;
+    for (std::uint32_t y = 0U; y < direct.image.height; ++y) {
+        for (std::uint32_t x = 0U; x < direct.image.width; ++x) {
+            for (std::uint8_t channel = 0U; channel < channels; ++channel) {
+                const double direct_value = static_cast<double>(direct.image.pixels[direct.image.index(x, y, channel)]);
+                const double transposed_value = static_cast<double>(swapped.image.pixels[swapped.image.index(y, x, channel)]);
+                maximum_axis_delta = std::max(maximum_axis_delta, std::abs(direct_value - transposed_value));
+            }
+        }
+    }
+
+    expect(
+        maximum_axis_delta <= 1.0e-5,
+        "visual regression gate: 8x reconstruction is axis-neutral without horizontal/vertical stripe bias");
+}
+
 void test_determinism_and_validation() {
     using namespace vektoryum::resample;
     const FloatImage source{3U, 2U, 1U, {0.0F, 0.2F, 0.8F, 1.0F, 0.4F, 0.6F}};
@@ -282,6 +340,7 @@ int run_resampler_tests() {
     test_downscale_antialiasing();
     test_measured_roundtrip_fidelity();
     test_premultiplied_alpha_edge_does_not_leak_hidden_rgb();
+    test_visual_regression_is_axis_neutral();
     test_determinism_and_validation();
     return resampler_failures;
 }
