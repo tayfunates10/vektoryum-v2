@@ -29,6 +29,8 @@ constexpr std::array<std::uint8_t, 64U> zigzag_to_natural{
 };
 
 constexpr std::size_t jpeg_max_pixels = 16U * 1024U * 1024U;
+// JPEG caps the number of 8x8 blocks in one minimum coded unit at ten.
+constexpr std::size_t jpeg_max_blocks_per_mcu = 10U;
 
 struct HuffmanTable {
     bool defined{false};
@@ -379,14 +381,16 @@ private:
 
     const std::uint8_t max_h = std::max({frame.components[0U].h, frame.components[1U].h, frame.components[2U].h});
     const std::uint8_t max_v = std::max({frame.components[0U].v, frame.components[1U].v, frame.components[2U].v});
-    const bool is_444 = max_h == 1U && max_v == 1U &&
-                        frame.components[0U].h == 1U && frame.components[0U].v == 1U &&
-                        frame.components[1U].h == 1U && frame.components[1U].v == 1U &&
-                        frame.components[2U].h == 1U && frame.components[2U].v == 1U;
-    const bool is_420 = frame.components[0U].h == 2U && frame.components[0U].v == 2U &&
-                        frame.components[1U].h == 1U && frame.components[1U].v == 1U &&
-                        frame.components[2U].h == 1U && frame.components[2U].v == 1U;
-    if (!is_444 && !is_420) {
+
+    // The MCU walk below derives every block position from the per-component
+    // sampling factors, so it covers 4:4:4, 4:2:2, 4:4:0 and 4:2:0 alike. The
+    // frame header already limits each factor to 1 or 2; the standard also caps
+    // the blocks in one MCU at ten.
+    std::size_t blocks_per_mcu = 0U;
+    for (const Component& component : frame.components) {
+        blocks_per_mcu += static_cast<std::size_t>(component.h) * component.v;
+    }
+    if (blocks_per_mcu > jpeg_max_blocks_per_mcu) {
         return fail(RasterDecodeError::UnsupportedFeature);
     }
 
