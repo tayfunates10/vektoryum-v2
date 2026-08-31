@@ -28,6 +28,7 @@ add_library(vektoryum_core STATIC
     src/io/limits.cpp
     src/io/png_decode.cpp
     src/io/raster_decode.cpp
+    src/io/webp_decode.cpp
     src/ml/artifact_digest.cpp
     src/ml/runtime_contract.cpp
     src/release/package_contents.cpp

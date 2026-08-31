@@ -15,6 +15,7 @@ namespace vektoryum::io {
 namespace detail {
 [[nodiscard]] RasterDecodeResult decode_jpeg(std::span<const std::uint8_t> bytes);
 [[nodiscard]] RasterDecodeResult decode_png(std::span<const std::uint8_t> bytes);
+[[nodiscard]] RasterDecodeResult decode_webp(std::span<const std::uint8_t> bytes) noexcept;
 }
 namespace {
 
@@ -155,168 +156,6 @@ struct IfdEntry {
     }
     const auto numerator = static_cast<std::uint32_t>(value) * 255U + static_cast<std::uint32_t>(alpha) / 2U;
     return static_cast<std::uint8_t>(std::min<std::uint32_t>(255U, numerator / static_cast<std::uint32_t>(alpha)));
-}
-
-class LsbBitReader {
-public:
-    explicit LsbBitReader(std::span<const std::uint8_t> bytes) noexcept : bytes_(bytes) {}
-
-    [[nodiscard]] std::optional<std::uint32_t> read(std::uint32_t count) noexcept {
-        if (count > 24U || bit_offset_ > bytes_.size() * 8U ||
-            static_cast<std::size_t>(count) > bytes_.size() * 8U - bit_offset_) {
-            return std::nullopt;
-        }
-        std::uint32_t value = 0U;
-        for (std::uint32_t i = 0U; i < count; ++i) {
-            const std::size_t absolute = bit_offset_ + static_cast<std::size_t>(i);
-            const auto byte = static_cast<std::uint32_t>(bytes_[absolute / 8U]);
-            const auto shift = static_cast<std::uint32_t>(absolute % 8U);
-            const auto bit = (byte >> shift) & 1U;
-            value |= bit << i;
-        }
-        bit_offset_ += static_cast<std::size_t>(count);
-        return value;
-    }
-
-private:
-    std::span<const std::uint8_t> bytes_;
-    std::size_t bit_offset_{0U};
-};
-
-[[nodiscard]] std::optional<std::uint32_t> read_vp8l_single_symbol(
-    LsbBitReader& reader,
-    std::uint32_t symbol_limit) noexcept {
-    const auto simple = reader.read(1U);
-    const auto has_second = reader.read(1U);
-    const auto first_is_eight_bits = reader.read(1U);
-    if (!simple.has_value() || !has_second.has_value() || !first_is_eight_bits.has_value() ||
-        *simple != 1U || *has_second != 0U) {
-        return std::nullopt;
-    }
-    const auto symbol = reader.read(*first_is_eight_bits != 0U ? 8U : 1U);
-    if (!symbol.has_value() || *symbol >= symbol_limit) {
-        return std::nullopt;
-    }
-    return symbol;
-}
-
-[[nodiscard]] std::optional<std::array<std::uint8_t, 4U>> decode_vp8l_single_literal(
-    LsbBitReader& reader,
-    bool spatial_image) noexcept {
-    const auto color_cache = reader.read(1U);
-    if (!color_cache.has_value() || *color_cache != 0U) {
-        return std::nullopt;
-    }
-    if (spatial_image) {
-        const auto meta_prefix = reader.read(1U);
-        if (!meta_prefix.has_value() || *meta_prefix != 0U) {
-            return std::nullopt;
-        }
-    }
-
-    const auto green = read_vp8l_single_symbol(reader, 280U);
-    const auto red = read_vp8l_single_symbol(reader, 256U);
-    const auto blue = read_vp8l_single_symbol(reader, 256U);
-    const auto alpha = read_vp8l_single_symbol(reader, 256U);
-    const auto distance = read_vp8l_single_symbol(reader, 40U);
-    if (!green.has_value() || !red.has_value() || !blue.has_value() || !alpha.has_value() ||
-        !distance.has_value() || *green >= 256U) {
-        return std::nullopt;
-    }
-
-    return std::array<std::uint8_t, 4U>{
-        static_cast<std::uint8_t>(*red),
-        static_cast<std::uint8_t>(*green),
-        static_cast<std::uint8_t>(*blue),
-        static_cast<std::uint8_t>(*alpha),
-    };
-}
-
-[[nodiscard]] RasterDecodeResult decode_webp_baseline(std::span<const std::uint8_t> bytes) {
-    constexpr std::size_t riff_header_size = 20U;
-    if (bytes.size() < riff_header_size + 5U || bytes[0U] != 'R' || bytes[1U] != 'I' ||
-        bytes[2U] != 'F' || bytes[3U] != 'F' || bytes[8U] != 'W' || bytes[9U] != 'E' ||
-        bytes[10U] != 'B' || bytes[11U] != 'P' || bytes[12U] != 'V' || bytes[13U] != 'P' ||
-        bytes[14U] != '8' || bytes[15U] != 'L') {
-        return fail(RasterDecodeError::MalformedContainer);
-    }
-
-    const auto riff_size = read_u32(bytes, 4U, ByteOrder::Little);
-    const auto chunk_size = read_u32(bytes, 16U, ByteOrder::Little);
-    if (!riff_size.has_value() || !chunk_size.has_value() || *chunk_size < 5U) {
-        return fail(RasterDecodeError::MalformedContainer);
-    }
-    if (static_cast<std::size_t>(*riff_size) + 8U > bytes.size() ||
-        !checked_range(riff_header_size, static_cast<std::size_t>(*chunk_size), bytes.size())) {
-        return fail(RasterDecodeError::TruncatedPixelData);
-    }
-    if (bytes[riff_header_size] != 0x2fU) {
-        return fail(RasterDecodeError::MalformedContainer);
-    }
-
-    LsbBitReader reader(bytes.subspan(riff_header_size + 1U, static_cast<std::size_t>(*chunk_size) - 1U));
-    const auto width_minus_one = reader.read(14U);
-    const auto height_minus_one = reader.read(14U);
-    const auto alpha_is_used = reader.read(1U);
-    const auto version = reader.read(3U);
-    if (!width_minus_one.has_value() || !height_minus_one.has_value() || !alpha_is_used.has_value() ||
-        !version.has_value()) {
-        return fail(RasterDecodeError::TruncatedPixelData);
-    }
-    if (*version != 0U) {
-        return fail(RasterDecodeError::UnsupportedFeature);
-    }
-
-    const std::uint32_t width = *width_minus_one + 1U;
-    const std::uint32_t height = *height_minus_one + 1U;
-    if (width > raster_decode_max_dimension || height > raster_decode_max_dimension) {
-        return fail(RasterDecodeError::DimensionLimitExceeded);
-    }
-    if (width != 1U || height != 1U) {
-        return fail(RasterDecodeError::UnsupportedFeature);
-    }
-
-    const auto has_transform = reader.read(1U);
-    const auto transform_type = reader.read(2U);
-    const auto palette_size_minus_one = reader.read(8U);
-    if (!has_transform.has_value() || !transform_type.has_value() || !palette_size_minus_one.has_value()) {
-        return fail(RasterDecodeError::TruncatedPixelData);
-    }
-    if (*has_transform != 1U || *transform_type != 3U || *palette_size_minus_one != 0U) {
-        return fail(RasterDecodeError::UnsupportedFeature);
-    }
-
-    const auto palette = decode_vp8l_single_literal(reader, false);
-    if (!palette.has_value()) {
-        return fail(RasterDecodeError::UnsupportedFeature);
-    }
-
-    const auto has_more_transforms = reader.read(1U);
-    if (!has_more_transforms.has_value()) {
-        return fail(RasterDecodeError::TruncatedPixelData);
-    }
-    if (*has_more_transforms != 0U) {
-        return fail(RasterDecodeError::UnsupportedFeature);
-    }
-
-    const auto indexed_pixel = decode_vp8l_single_literal(reader, true);
-    if (!indexed_pixel.has_value()) {
-        return fail(RasterDecodeError::UnsupportedFeature);
-    }
-    if ((*indexed_pixel)[1U] != 0U) {
-        return fail(RasterDecodeError::MalformedContainer);
-    }
-
-    DecodedRaster decoded{};
-    decoded.spec.width = width;
-    decoded.spec.height = height;
-    decoded.spec.layout = core::PixelLayout::RGBA;
-    decoded.spec.channel_type = core::ChannelType::UInt8;
-    decoded.spec.transfer = core::TransferFunction::SRGB;
-    decoded.spec.primaries = core::ColorPrimaries::SRGB;
-    decoded.spec.alpha = core::AlphaMode::Straight;
-    decoded.rgba8.assign(palette->begin(), palette->end());
-    return {RasterDecodeError::None, std::move(decoded)};
 }
 
 [[nodiscard]] RasterDecodeResult decode_tiff(std::span<const std::uint8_t> bytes) {
@@ -491,7 +330,7 @@ RasterDecodeResult decode_raster(RasterFormat format, std::span<const std::uint8
             case RasterFormat::Tiff: return decode_tiff(bytes);
             case RasterFormat::Png: return detail::decode_png(bytes);
             case RasterFormat::Jpeg: return detail::decode_jpeg(bytes);
-            case RasterFormat::Webp: return decode_webp_baseline(bytes);
+            case RasterFormat::Webp: return detail::decode_webp(bytes);
             case RasterFormat::Unknown: return fail(RasterDecodeError::UnsupportedFormat);
         }
     } catch (const std::bad_alloc&) {
