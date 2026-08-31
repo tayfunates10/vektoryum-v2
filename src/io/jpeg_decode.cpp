@@ -419,7 +419,7 @@ private:
 
 }  // namespace
 
-RasterDecodeResult decode_jpeg(std::span<const std::uint8_t> bytes) {
+RasterDecodeResult decode_jpeg_grayscale(std::span<const std::uint8_t> bytes) {
     if (bytes.size() < 4U || bytes[0U] != 0xffU || bytes[1U] != 0xd8U) {
         return fail(RasterDecodeError::MalformedContainer);
     }
