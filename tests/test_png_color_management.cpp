@@ -50,6 +50,15 @@ void append_png_chunk(
     append_u32_be(png, crc ^ 0xffffffffU);
 }
 
+void append_common_rgb_body(std::vector<std::uint8_t>& png) {
+    // zlib stream containing one unfiltered RGB scanline: {filter=0, R=10, G=20, B=30}.
+    const std::array<std::uint8_t, 15U> zlib{
+        0x78U, 0x01U, 0x01U, 0x04U, 0x00U, 0xfbU, 0xffU, 0x00U,
+        0x0aU, 0x14U, 0x1eU, 0x00U, 0x68U, 0x00U, 0x3dU};
+    append_png_chunk(png, {0x49U, 0x44U, 0x41U, 0x54U}, zlib);
+    append_png_chunk(png, {0x49U, 0x45U, 0x4eU, 0x44U}, std::span<const std::uint8_t>{});
+}
+
 [[nodiscard]] std::vector<std::uint8_t> make_rgb_png_with_srgb(std::uint8_t rendering_intent) {
     std::vector<std::uint8_t> png{0x89U, 0x50U, 0x4eU, 0x47U, 0x0dU, 0x0aU, 0x1aU, 0x0aU};
 
@@ -61,13 +70,23 @@ void append_png_chunk(
 
     const std::array<std::uint8_t, 1U> srgb{rendering_intent};
     append_png_chunk(png, {0x73U, 0x52U, 0x47U, 0x42U}, srgb);
+    append_common_rgb_body(png);
+    return png;
+}
 
-    // zlib stream containing one unfiltered RGB scanline: {filter=0, R=10, G=20, B=30}.
-    const std::array<std::uint8_t, 15U> zlib{
-        0x78U, 0x01U, 0x01U, 0x04U, 0x00U, 0xfbU, 0xffU, 0x00U,
-        0x0aU, 0x14U, 0x1eU, 0x00U, 0x68U, 0x00U, 0x3dU};
-    append_png_chunk(png, {0x49U, 0x44U, 0x41U, 0x54U}, zlib);
-    append_png_chunk(png, {0x49U, 0x45U, 0x4eU, 0x44U}, std::span<const std::uint8_t>{});
+[[nodiscard]] std::vector<std::uint8_t> make_rgb_png_with_gamma(std::uint32_t gamma_times_100000) {
+    std::vector<std::uint8_t> png{0x89U, 0x50U, 0x4eU, 0x47U, 0x0dU, 0x0aU, 0x1aU, 0x0aU};
+
+    std::vector<std::uint8_t> ihdr;
+    append_u32_be(ihdr, 1U);
+    append_u32_be(ihdr, 1U);
+    ihdr.insert(ihdr.end(), {8U, 2U, 0U, 0U, 0U});
+    append_png_chunk(png, {0x49U, 0x48U, 0x44U, 0x52U}, ihdr);
+
+    std::vector<std::uint8_t> gamma;
+    append_u32_be(gamma, gamma_times_100000);
+    append_png_chunk(png, {0x67U, 0x41U, 0x4dU, 0x41U}, gamma);
+    append_common_rgb_body(png);
     return png;
 }
 
@@ -91,6 +110,19 @@ int main() {
     const auto invalid = make_rgb_png_with_srgb(4U);
     const io::RasterDecodeResult rejected = io::decode_raster(io::RasterFormat::Png, invalid);
     require(!rejected.ok(), "PNG sRGB rendering intent outside 0..3 must fail closed");
+
+    const auto canonical_gamma = make_rgb_png_with_gamma(45455U);
+    const io::RasterDecodeResult gamma_decoded = io::decode_raster(io::RasterFormat::Png, canonical_gamma);
+    require(gamma_decoded.ok(), "PNG with canonical sRGB-compatible gAMA must decode");
+    require(gamma_decoded.image.rgba8 == std::vector<std::uint8_t>({10U, 20U, 30U, 255U}),
+            "canonical gAMA PNG must preserve canonical RGBA8 samples");
+    require(gamma_decoded.image.spec.transfer == core::TransferFunction::SRGB,
+            "canonical gAMA PNG must normalize to sRGB transfer");
+
+    const auto noncanonical_gamma = make_rgb_png_with_gamma(100000U);
+    const io::RasterDecodeResult gamma_rejected = io::decode_raster(io::RasterFormat::Png, noncanonical_gamma);
+    require(!gamma_rejected.ok(),
+            "PNG with non-sRGB gAMA must fail closed until explicit transfer conversion is implemented");
 
     return 0;
 }
