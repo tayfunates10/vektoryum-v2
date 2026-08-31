@@ -163,6 +163,10 @@ add_executable(vektoryum_png_color_management_tests tests/test_png_color_managem
 target_link_libraries(vektoryum_png_color_management_tests PRIVATE vektoryum_core)
 vektoryum_apply_warnings(vektoryum_png_color_management_tests)
 
+add_executable(vektoryum_jpeg_color_sampling_tests tests/test_jpeg_color_sampling.cpp)
+target_link_libraries(vektoryum_jpeg_color_sampling_tests PRIVATE vektoryum_core)
+vektoryum_apply_warnings(vektoryum_jpeg_color_sampling_tests)
+
 add_executable(vektoryum_cli_convert_matrix_tests tests/test_cli_convert_matrix.cpp)
 vektoryum_apply_warnings(vektoryum_cli_convert_matrix_tests)
 
@@ -189,6 +193,7 @@ if(VEKTORYUM_ENABLE_SANITIZERS AND NOT MSVC)
         vektoryum_raster_decode_tests
         vektoryum_png_dynamic_tests
         vektoryum_png_color_management_tests
+        vektoryum_jpeg_color_sampling_tests
         vektoryum_cli_convert_matrix_tests)
         target_compile_options(${target} PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
         target_link_options(${target} PRIVATE -fsanitize=address,undefined)
@@ -216,4 +221,5 @@ add_test(NAME vektoryum.package_identity COMMAND vektoryum_package_identity_test
 add_test(NAME vektoryum.raster_decode COMMAND vektoryum_raster_decode_tests)
 add_test(NAME vektoryum.png_dynamic COMMAND vektoryum_png_dynamic_tests)
 add_test(NAME vektoryum.png_color_management COMMAND vektoryum_png_color_management_tests)
+add_test(NAME vektoryum.jpeg_color_sampling COMMAND vektoryum_jpeg_color_sampling_tests)
 add_test(NAME vektoryum.cli_convert_matrix COMMAND vektoryum_cli_convert_matrix_tests $<TARGET_FILE:vektoryum_cli>)
