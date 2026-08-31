@@ -201,7 +201,9 @@ public:
         std::uint32_t value = 0U;
         for (std::uint32_t i = 0U; i < count; ++i) {
             const std::size_t absolute = bit_offset_ + static_cast<std::size_t>(i);
-            const auto bit = static_cast<std::uint32_t>((bytes_[absolute / 8U] >> (absolute % 8U)) & 1U);
+            const auto byte = static_cast<std::uint32_t>(bytes_[absolute / 8U]);
+            const auto shift = static_cast<std::uint32_t>(absolute % 8U);
+            const auto bit = (byte >> shift) & 1U;
             value |= bit << i;
         }
         bit_offset_ += static_cast<std::size_t>(count);
