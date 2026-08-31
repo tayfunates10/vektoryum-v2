@@ -4,6 +4,7 @@
 #include <string_view>
 #include <vector>
 
+#include "vektoryum/vector/curve_recovery.hpp"
 #include "vektoryum/vector/svg_path.hpp"
 
 namespace {
@@ -108,6 +109,58 @@ int run_svg_path_tests() {
                 "open path is rejected");
     expect_true(fit_svg_paths(rectangle, {.corner_radius = -1.0}).error == SvgFitError::InvalidRadius,
                 "negative radius is rejected");
+
+    constexpr std::uint32_t circle_size = 128U;
+    constexpr std::int32_t circle_center = 64;
+    constexpr std::int32_t circle_radius = 40;
+    std::vector<std::uint8_t> circle_coverage(circle_size * circle_size, 0U);
+    std::vector<std::uint8_t> circle_reference(circle_size * circle_size, 0U);
+    for (std::uint32_t y = 0U; y < circle_size; ++y) {
+        for (std::uint32_t x = 0U; x < circle_size; ++x) {
+            const auto dx = static_cast<std::int32_t>(x) - circle_center;
+            const auto dy = static_cast<std::int32_t>(y) - circle_center;
+            if ((dx * dx) + (dy * dy) <= circle_radius * circle_radius) {
+                const auto index = static_cast<std::size_t>(y) * circle_size + x;
+                circle_coverage[index] = 255U;
+                circle_reference[index] = 1U;
+            }
+        }
+    }
+
+    const auto circle_vector = reconstruct_binary_mask(
+        circle_coverage, circle_size, circle_size);
+    expect_true(circle_vector.ok() && !circle_vector.scene.paths.empty(),
+                "dense raster circle reconstructs before curve recovery");
+
+    const auto recovered_circle = recover_curves_certified(
+        circle_vector.scene, circle_reference, circle_size, circle_size);
+    expect_true(recovered_circle.ok(),
+                "curve recovery remains behind raster fidelity certification");
+    expect_true(recovered_circle.used_curves,
+                "certified smooth contour emits cubic Bezier geometry");
+    expect_true(recovered_circle.reduced_nodes(),
+                "certified smooth contour reduces source node count");
+    expect_true(recovered_circle.certification.raster_iou >= 0.995 &&
+                    recovered_circle.certification.disagreement_ratio <= 0.005,
+                "curve recovery preserves committed fidelity thresholds");
+
+    const auto recovered_repeat = recover_curves_certified(
+        circle_vector.scene, circle_reference, circle_size, circle_size);
+    expect_true(recovered_repeat.ok() &&
+                    recovered_repeat.recovered_nodes == recovered_circle.recovered_nodes &&
+                    serialize_svg_path_data(recovered_repeat.scene.paths[0]) ==
+                        serialize_svg_path_data(recovered_circle.scene.paths[0]),
+                "certified curve recovery is deterministic");
+
+    const auto exact_only_recovery = recover_curves_certified(
+        rectangle, rectangle_pixels, 16U, 16U,
+        {.simplify_tolerance = 8.0,
+         .corner_radius = 8.0,
+         .certification = {.min_iou = 1.0, .max_disagreement_ratio = 0.0}});
+    expect_true(exact_only_recovery.ok() && !exact_only_recovery.used_curves &&
+                    !exact_only_recovery.reduced_nodes() &&
+                    exact_only_recovery.certification.raster_iou == 1.0,
+                "failed curve candidate falls back to exact polygon without weakening gates");
 
     return failures;
 }
