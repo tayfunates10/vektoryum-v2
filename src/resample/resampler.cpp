@@ -205,33 +205,40 @@ ResampleResult resize(
             const auto& taps = horizontal_taps[static_cast<std::size_t>(x)];
             for (std::uint8_t channel = 0U; channel < source.channels; ++channel) {
                 double weighted = 0.0;
-                float local_min = std::numeric_limits<float>::infinity();
-                float local_max = -std::numeric_limits<float>::infinity();
                 for (const Tap& tap : taps) {
                     const float sample = source.pixels[source.index(tap.source_index, y, channel)];
                     weighted += static_cast<double>(sample) * tap.weight;
-                    local_min = std::min(local_min, sample);
-                    local_max = std::max(local_max, sample);
                 }
-                horizontal.pixels[horizontal.index(x, y, channel)] = clamp_local(
-                    static_cast<float>(weighted), local_min, local_max, options.clamp_to_local_range);
+                horizontal.pixels[horizontal.index(x, y, channel)] = static_cast<float>(weighted);
             }
         }
     }
 
     FloatImage output{target_width, target_height, source.channels, std::vector<float>(target_samples, 0.0F)};
     for (std::uint32_t y = 0U; y < target_height; ++y) {
-        const auto& taps = vertical_taps[static_cast<std::size_t>(y)];
+        const auto& y_taps = vertical_taps[static_cast<std::size_t>(y)];
         for (std::uint32_t x = 0U; x < target_width; ++x) {
+            const auto& x_taps = horizontal_taps[static_cast<std::size_t>(x)];
             for (std::uint8_t channel = 0U; channel < source.channels; ++channel) {
                 double weighted = 0.0;
-                float local_min = std::numeric_limits<float>::infinity();
-                float local_max = -std::numeric_limits<float>::infinity();
-                for (const Tap& tap : taps) {
+                for (const Tap& tap : y_taps) {
                     const float sample = horizontal.pixels[horizontal.index(x, tap.source_index, channel)];
                     weighted += static_cast<double>(sample) * tap.weight;
-                    local_min = std::min(local_min, sample);
-                    local_max = std::max(local_max, sample);
+                }
+
+                float local_min = std::numeric_limits<float>::infinity();
+                float local_max = -std::numeric_limits<float>::infinity();
+                if (options.clamp_to_local_range) {
+                    for (const Tap& y_tap : y_taps) {
+                        for (const Tap& x_tap : x_taps) {
+                            const float sample = source.pixels[source.index(
+                                x_tap.source_index,
+                                y_tap.source_index,
+                                channel)];
+                            local_min = std::min(local_min, sample);
+                            local_max = std::max(local_max, sample);
+                        }
+                    }
                 }
                 output.pixels[output.index(x, y, channel)] = clamp_local(
                     static_cast<float>(weighted), local_min, local_max, options.clamp_to_local_range);
