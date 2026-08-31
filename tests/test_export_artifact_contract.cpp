@@ -45,7 +45,7 @@ namespace {
 [[nodiscard]] std::vector<std::uint8_t> valid_payload(ExportFormat format) {
     switch (format) {
         case ExportFormat::Svg:
-            return bytes("<svg xmlns=\"http://www.w3.org/2000/svg\"><path d=\"M0 0L1 1\"/></svg>\n");
+            return bytes("<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 32 32\">\n<path d=\"M0 0L1 1\" fill-rule=\"evenodd\"/>\n</svg>\n");
         case ExportFormat::Pdf:
             return bytes("%PDF-1.7\n1 0 obj\n<<>>\nendobj\n%%EOF\n");
         case ExportFormat::Eps:
