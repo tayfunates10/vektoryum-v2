@@ -23,7 +23,12 @@ add_library(vektoryum_core STATIC
     src/hybrid/alpha_composite.cpp
     src/hybrid/hybrid_output_contract.cpp
     src/hybrid/hybrid_plan.cpp
+    src/io/jpeg_decode.cpp
+    src/io/jpeg_color_decode.cpp
     src/io/limits.cpp
+    src/io/png_decode.cpp
+    src/io/raster_decode.cpp
+    src/io/webp_decode.cpp
     src/ml/artifact_digest.cpp
     src/ml/runtime_contract.cpp
     src/release/package_contents.cpp
@@ -148,6 +153,37 @@ add_executable(vektoryum_package_identity_tests tests/test_package_identity.cpp)
 target_link_libraries(vektoryum_package_identity_tests PRIVATE vektoryum_core)
 vektoryum_apply_warnings(vektoryum_package_identity_tests)
 
+add_executable(vektoryum_raster_decode_tests tests/test_raster_decode.cpp)
+target_link_libraries(vektoryum_raster_decode_tests PRIVATE vektoryum_core)
+vektoryum_apply_warnings(vektoryum_raster_decode_tests)
+
+add_executable(vektoryum_png_dynamic_tests tests/test_png_dynamic.cpp)
+target_link_libraries(vektoryum_png_dynamic_tests PRIVATE vektoryum_core)
+vektoryum_apply_warnings(vektoryum_png_dynamic_tests)
+
+add_executable(vektoryum_png_color_management_tests tests/test_png_color_management.cpp)
+target_link_libraries(vektoryum_png_color_management_tests PRIVATE vektoryum_core)
+vektoryum_apply_warnings(vektoryum_png_color_management_tests)
+
+add_executable(vektoryum_jpeg_color_sampling_tests tests/test_jpeg_color_sampling.cpp)
+target_link_libraries(vektoryum_jpeg_color_sampling_tests PRIVATE vektoryum_core)
+vektoryum_apply_warnings(vektoryum_jpeg_color_sampling_tests)
+
+add_executable(vektoryum_png_decode_tests tests/test_png_decode.cpp)
+target_link_libraries(vektoryum_png_decode_tests PRIVATE vektoryum_core)
+vektoryum_apply_warnings(vektoryum_png_decode_tests)
+
+add_executable(vektoryum_tiff_decode_tests tests/test_tiff_decode.cpp)
+target_link_libraries(vektoryum_tiff_decode_tests PRIVATE vektoryum_core)
+vektoryum_apply_warnings(vektoryum_tiff_decode_tests)
+
+add_executable(vektoryum_webp_decode_tests tests/test_webp_decode.cpp)
+target_link_libraries(vektoryum_webp_decode_tests PRIVATE vektoryum_core)
+vektoryum_apply_warnings(vektoryum_webp_decode_tests)
+
+add_executable(vektoryum_cli_convert_matrix_tests tests/test_cli_convert_matrix.cpp)
+vektoryum_apply_warnings(vektoryum_cli_convert_matrix_tests)
+
 if(VEKTORYUM_ENABLE_SANITIZERS AND NOT MSVC)
     foreach(target
         vektoryum_tests
@@ -167,7 +203,15 @@ if(VEKTORYUM_ENABLE_SANITIZERS AND NOT MSVC)
         vektoryum_release_manifest_tests
         vektoryum_package_inventory_tests
         vektoryum_package_contents_tests
-        vektoryum_package_identity_tests)
+        vektoryum_package_identity_tests
+        vektoryum_raster_decode_tests
+        vektoryum_png_dynamic_tests
+        vektoryum_png_color_management_tests
+        vektoryum_jpeg_color_sampling_tests
+        vektoryum_png_decode_tests
+        vektoryum_tiff_decode_tests
+        vektoryum_webp_decode_tests
+        vektoryum_cli_convert_matrix_tests)
         target_compile_options(${target} PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
         target_link_options(${target} PRIVATE -fsanitize=address,undefined)
     endforeach()
@@ -191,3 +235,11 @@ add_test(NAME vektoryum.release_manifest COMMAND vektoryum_release_manifest_test
 add_test(NAME vektoryum.package_inventory COMMAND vektoryum_package_inventory_tests)
 add_test(NAME vektoryum.package_contents COMMAND vektoryum_package_contents_tests)
 add_test(NAME vektoryum.package_identity COMMAND vektoryum_package_identity_tests)
+add_test(NAME vektoryum.raster_decode COMMAND vektoryum_raster_decode_tests)
+add_test(NAME vektoryum.png_dynamic COMMAND vektoryum_png_dynamic_tests)
+add_test(NAME vektoryum.png_color_management COMMAND vektoryum_png_color_management_tests)
+add_test(NAME vektoryum.jpeg_color_sampling COMMAND vektoryum_jpeg_color_sampling_tests)
+add_test(NAME vektoryum.png_decode COMMAND vektoryum_png_decode_tests)
+add_test(NAME vektoryum.tiff_decode COMMAND vektoryum_tiff_decode_tests)
+add_test(NAME vektoryum.webp_decode COMMAND vektoryum_webp_decode_tests)
+add_test(NAME vektoryum.cli_convert_matrix COMMAND vektoryum_cli_convert_matrix_tests $<TARGET_FILE:vektoryum_cli>)

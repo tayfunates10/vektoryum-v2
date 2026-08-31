@@ -2,9 +2,9 @@
 
 Contract/infrastructure roadmap completion: **100%**
 
-Functional end-user product readiness: **35%** (30 August 2026 local visual audit baseline).
+Functional end-user product readiness: **corrective R2 complete; R3 is next**.
 
-The Stage 0-13 contract roadmap is complete, but that does **not** mean the end-user raster-to-vector/upscale product is complete. The current CLI still lacks a real image `convert` command, image decoding/input loading, production geometry-backed SVG/PDF/EPS/DXF output, curve recovery quality and a complete real-input end-to-end conversion chain. Product readiness will return to 100% only after those acceptance gaps are implemented and independently tested.
+The Stage 0-13 contract roadmap is complete, but that does **not** mean the end-user raster-to-vector/upscale product is complete. Corrective R1 and R2 now establish real Release builds plus bounded real PNG/JPEG/WebP/TIFF ingestion, canonical color/alpha normalization and deterministic CLI `--convert` coverage. Product readiness will return to 100% only after the remaining R3-R6 acceptance gaps are implemented and independently tested: resampler quality/root-cause correction, curve recovery, geometry-backed SVG/PDF/EPS/DXF export, and one complete real-input end-to-end certified conversion chain.
 
 Workflow: branch → pull request → CI → merge only after all required checks pass.
 
@@ -33,12 +33,30 @@ The post-roadmap visual audit exposed gaps that the contract-focused acceptance 
 
 | Corrective stage | Acceptance goal | Status |
 |---|---|---|
-| R1 | Real Release builds on Linux/macOS/Windows with warnings-as-errors and meaningful tests | active |
-| R2 | PNG/JPEG/WebP/TIFF decode, color/alpha handling and CLI `convert` | pending |
+| R1 | Real Release builds on Linux/macOS/Windows with warnings-as-errors and meaningful tests | complete |
+| R2 | PNG/JPEG/WebP/TIFF decode, color/alpha handling and CLI `convert` | complete |
 | R3 | Resampler artifact/root-cause fix plus fixture PSNR/SSIM and visual regression gates | pending |
 | R4 | Curve recovery as cubic Bézier/arc with fidelity-bounded node reduction | pending |
 | R5 | Real scene-backed SVG/PDF/EPS/DXF encoders validated by standard readers | pending |
 | R6 | Real input → analysis → upscale/vector → export → quality certificate end-to-end acceptance | pending |
+
+## Verified corrective milestones
+
+### R1 — complete
+
+- True Release builds are exercised on Linux, macOS and Windows with warnings-as-errors retained.
+- Cross-platform CTest and Linux sanitizer coverage remain required acceptance gates.
+
+### R2 — complete
+
+- Bounded real raster ingestion recognizes PNG/JPEG/WebP/TIFF by content rather than file extension and fails closed on invalid/unsupported inputs.
+- Accepted raster inputs normalize deterministically to canonical RGBA8, sRGB transfer/primaries and straight alpha semantics.
+- PNG acceptance covers supported 8-bit Gray/RGB/Gray+Alpha/RGBA paths, scanline filters, CRC/Adler checks, stored/fixed/dynamic DEFLATE and color-management policy.
+- JPEG acceptance covers baseline grayscale and normal three-component color sampling/subsampling paths required by the corrective acceptance suite.
+- WebP acceptance exercises real multi-pixel lossless VP8L fixtures including RGB/alpha, palette/transform/predictor/back-reference behavior and deterministic decode.
+- TIFF acceptance covers supported Gray/RGB/RGBA, byte-order/strip handling and associated-alpha normalization.
+- CLI `--convert INPUT OUTPUT` is exercised across PNG/JPEG/WebP/TIFF and emits deterministic canonical PAM RGBA8 output.
+- R2 acceptance was green on exact HEAD `4d819dd83071038df40ae5c2dea912c41adbb34e` with `core-ci #288`; the README update itself must receive a fresh exact-head green run before merge.
 
 ## Verified contract milestones
 
@@ -50,11 +68,9 @@ These milestones remain valuable and are not being weakened. They are prerequisi
 
 ## Current corrective priority
 
-1. Make CI build true Release binaries on Unix runners and fix Release-only failures without suppressing warnings.
-2. Add real image ingestion and a `convert` command.
-3. Fix measured logo/resampler artifacts and add objective quality regression gates.
-4. Recover real curves with bounded node complexity.
-5. Connect all four exporters to real scene geometry and validate generated files.
-6. Certify one complete real-user conversion chain end to end.
+1. Fix measured logo/resampler artifacts at their algorithmic root cause and add objective PSNR/SSIM/visual regression gates.
+2. Recover real curves with bounded node complexity.
+3. Connect all four exporters to real scene geometry and validate generated files.
+4. Certify one complete real-user conversion chain end to end.
 
 UI, account and subscription work remains deferred until functional product readiness reaches 100%.

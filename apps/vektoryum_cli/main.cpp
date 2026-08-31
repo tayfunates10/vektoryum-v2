@@ -1,3 +1,4 @@
+#include <fstream>
 #include <iostream>
 #include <string>
 #include <string_view>
@@ -5,12 +6,82 @@
 #include "vektoryum/api/stable_api.hpp"
 #include "vektoryum/certification/quality_certificate.hpp"
 #include "vektoryum/export/canonical_encoder.hpp"
+#include "vektoryum/io/raster_decode.hpp"
+#include "vektoryum/io/raster_input.hpp"
 #include "vektoryum/version.hpp"
 
 namespace {
 
 int print_version() {
     std::cout << "Vektoryum v2 core " << vektoryum::version_string() << '\n';
+    return static_cast<int>(vektoryum::api::ExitCode::Success);
+}
+
+int probe_raster_input(std::string_view path) {
+    const auto loaded = vektoryum::io::load_raster_input(std::string(path));
+    if (!loaded.ok()) {
+        std::cout << "schema_version=vektoryum.raster-input.v1\n"
+                  << "status=error\n"
+                  << "error=" << vektoryum::io::raster_input_error_name(loaded.error) << '\n';
+        return static_cast<int>(vektoryum::api::ExitCode::Data);
+    }
+
+    std::cout << "schema_version=vektoryum.raster-input.v1\n"
+              << "status=accepted\n"
+              << "format=" << vektoryum::io::raster_format_name(loaded.input.format) << '\n'
+              << "input_bytes=" << loaded.input.bytes.size() << '\n';
+    return static_cast<int>(vektoryum::api::ExitCode::Success);
+}
+
+int convert_raster_input(std::string_view input_path, std::string_view output_path) {
+    const auto loaded = vektoryum::io::load_raster_input(std::string(input_path));
+    if (!loaded.ok()) {
+        std::cout << "schema_version=vektoryum.raster-convert.v1\n"
+                  << "status=error\n"
+                  << "error=" << vektoryum::io::raster_input_error_name(loaded.error) << '\n';
+        return static_cast<int>(vektoryum::api::ExitCode::Data);
+    }
+
+    const auto decoded = vektoryum::io::decode_raster(loaded.input.format, loaded.input.bytes);
+    if (!decoded.ok()) {
+        std::cout << "schema_version=vektoryum.raster-convert.v1\n"
+                  << "status=error\n"
+                  << "error=" << vektoryum::io::raster_decode_error_name(decoded.error) << '\n';
+        return static_cast<int>(vektoryum::api::ExitCode::Data);
+    }
+
+    std::ofstream output(std::string(output_path), std::ios::binary | std::ios::trunc);
+    if (!output) {
+        std::cout << "schema_version=vektoryum.raster-convert.v1\n"
+                  << "status=error\n"
+                  << "error=output_open_failed\n";
+        return static_cast<int>(vektoryum::api::ExitCode::Data);
+    }
+
+    output << "P7\n"
+           << "WIDTH " << decoded.image.spec.width << '\n'
+           << "HEIGHT " << decoded.image.spec.height << '\n'
+           << "DEPTH 4\n"
+           << "MAXVAL 255\n"
+           << "TUPLTYPE RGB_ALPHA\n"
+           << "ENDHDR\n";
+    output.write(
+        reinterpret_cast<const char*>(decoded.image.rgba8.data()),
+        static_cast<std::streamsize>(decoded.image.rgba8.size()));
+    output.close();
+    if (!output) {
+        std::cout << "schema_version=vektoryum.raster-convert.v1\n"
+                  << "status=error\n"
+                  << "error=output_write_failed\n";
+        return static_cast<int>(vektoryum::api::ExitCode::Data);
+    }
+
+    std::cout << "schema_version=vektoryum.raster-convert.v1\n"
+              << "status=success\n"
+              << "format=pam_rgba8\n"
+              << "width=" << decoded.image.spec.width << '\n'
+              << "height=" << decoded.image.spec.height << '\n'
+              << "pixel_bytes=" << decoded.image.rgba8.size() << '\n';
     return static_cast<int>(vektoryum::api::ExitCode::Success);
 }
 
@@ -95,9 +166,17 @@ int main(int argc, char** argv) {
             return print_version();
         }
         if (argument == "--help") {
-            std::cout << "usage: vektoryum_cli [--version|--help|--certified-export REQUEST_ID [CERTIFICATE_SHA256]]\n";
+            std::cout << "usage: vektoryum_cli [--version|--help|--probe-input FILE|--convert INPUT OUTPUT|--certified-export REQUEST_ID [CERTIFICATE_SHA256]]\n";
             return static_cast<int>(vektoryum::api::ExitCode::Success);
         }
+    }
+
+    if (argc == 3 && std::string_view{argv[1]} == "--probe-input") {
+        return probe_raster_input(argv[2]);
+    }
+
+    if (argc == 4 && std::string_view{argv[1]} == "--convert") {
+        return convert_raster_input(argv[2], argv[3]);
     }
 
     if ((argc == 3 || argc == 4) && std::string_view{argv[1]} == "--certified-export") {
