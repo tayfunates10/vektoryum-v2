@@ -2,9 +2,9 @@
 
 Contract/infrastructure roadmap completion: **100%**
 
-Functional end-user product readiness: **corrective R3 complete; R4 is next**.
+Functional end-user product readiness: **corrective R4 implementation complete; R5 is next after exact-head merge evidence**.
 
-The Stage 0-13 contract roadmap is complete, but that does **not** mean the end-user raster-to-vector/upscale product is complete. Corrective R1-R3 now establish real Release builds, bounded real PNG/JPEG/WebP/TIFF ingestion, canonical color/alpha normalization, deterministic CLI `--convert` coverage, and a measured resampler artifact correction guarded by PSNR/SSIM and visual-regression acceptance tests. Product readiness will return to 100% only after the remaining R4-R6 acceptance gaps are implemented and independently tested: curve recovery, geometry-backed SVG/PDF/EPS/DXF export, and one complete real-input end-to-end certified conversion chain.
+The Stage 0-13 contract roadmap is complete, but that does **not** mean the end-user raster-to-vector/upscale product is complete. Corrective R1-R4 now establish real Release builds, bounded real PNG/JPEG/WebP/TIFF ingestion, canonical color/alpha normalization, deterministic CLI `--convert` coverage, a measured resampler artifact correction guarded by PSNR/SSIM and visual-regression acceptance tests, and certified cubic curve recovery with fidelity-bounded node reduction. Product readiness will return to 100% only after the remaining R5-R6 acceptance gaps are implemented and independently tested: geometry-backed SVG/PDF/EPS/DXF export and one complete real-input end-to-end certified conversion chain.
 
 Workflow: branch → pull request → CI → merge only after all required checks pass.
 
@@ -36,7 +36,7 @@ The post-roadmap visual audit exposed gaps that the contract-focused acceptance 
 | R1 | Real Release builds on Linux/macOS/Windows with warnings-as-errors and meaningful tests | complete |
 | R2 | PNG/JPEG/WebP/TIFF decode, color/alpha handling and CLI `convert` | complete |
 | R3 | Resampler artifact/root-cause fix plus fixture PSNR/SSIM and visual regression gates | complete |
-| R4 | Curve recovery as cubic Bézier/arc with fidelity-bounded node reduction | pending |
+| R4 | Curve recovery as cubic Bézier/arc with fidelity-bounded node reduction | complete |
 | R5 | Real scene-backed SVG/PDF/EPS/DXF encoders validated by standard readers | pending |
 | R6 | Real input → analysis → upscale/vector → export → quality certificate end-to-end acceptance | pending |
 
@@ -63,7 +63,15 @@ The post-roadmap visual audit exposed gaps that the contract-focused acceptance 
 - Fixture-based measured quality gates require smooth-RGB round-trip PSNR ≥ 35 dB and SSIM ≥ 0.98.
 - Premultiplied-alpha regression coverage prevents transparent-edge hidden-RGB leakage and keeps reconstructed RGB bounded by alpha.
 - An 8× transpose-invariance visual-regression fixture gates horizontal/vertical artifact bias with a maximum axis delta of 1e-5.
-- R3 implementation acceptance is green on exact HEAD `532483811d8cc33c454b8115fdf79e36d234435a` with `core-ci #294`. This README status commit must itself receive a fresh exact-head green run before R3 is merged.
+- R3 was merged only after its README status commit received fresh exact-head green CI evidence.
+
+### R4 — complete
+
+- Dense reconstructed contours can be simplified deterministically and fitted to cubic Bézier geometry rather than remaining dense polyline-only output.
+- Node reduction is accepted only when the independently rasterized curved candidate passes the existing fidelity certification gate (`IoU ≥ 0.995`, disagreement ratio `≤ 0.005`).
+- Failed curve candidates fall back to the exact polygon; acceptance thresholds are never relaxed to force node reduction.
+- Circle regression coverage proves cubic geometry emission, node reduction, fidelity preservation and deterministic serialization; strict exact-fidelity coverage proves fail-safe polygon fallback.
+- R4 implementation acceptance is green on exact HEAD `efd35aeee4657529b91930a225dcf4120a5c754d` with `core-ci #299`. This README status commit must itself receive a fresh exact-head green run before R4 is merged.
 
 ## Verified contract milestones
 
@@ -75,8 +83,7 @@ These milestones remain valuable and are not being weakened. They are prerequisi
 
 ## Current corrective priority
 
-1. Recover real curves as cubic Bézier/arc geometry while reducing node count only under fidelity gates.
-2. Connect all four exporters to real scene geometry and validate generated files with standard readers.
-3. Certify one complete real-user conversion chain end to end.
+1. Connect all four exporters to real scene geometry and validate generated files with standard readers.
+2. Certify one complete real-user conversion chain end to end.
 
 UI, account and subscription work remains deferred until functional product readiness reaches 100%.
