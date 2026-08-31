@@ -64,44 +64,6 @@ struct IfdEntry {
     return (b0 << 24U) | (b1 << 16U) | (b2 << 8U) | b3;
 }
 
-[[nodiscard]] std::uint32_t read_be32_unchecked(std::span<const std::uint8_t> bytes, std::size_t offset) noexcept {
-    return (static_cast<std::uint32_t>(bytes[offset]) << 24U) |
-           (static_cast<std::uint32_t>(bytes[offset + 1U]) << 16U) |
-           (static_cast<std::uint32_t>(bytes[offset + 2U]) << 8U) |
-           static_cast<std::uint32_t>(bytes[offset + 3U]);
-}
-
-[[nodiscard]] bool png_has_invalid_srgb(std::span<const std::uint8_t> bytes) noexcept {
-    constexpr std::size_t signature_size = 8U;
-    constexpr std::uint32_t canonical_srgb_gamma = 45455U;
-    if (bytes.size() < signature_size) {
-        return false;
-    }
-
-    std::size_t offset = signature_size;
-    while (checked_range(offset, 12U, bytes.size())) {
-        const std::size_t length = static_cast<std::size_t>(read_be32_unchecked(bytes, offset));
-        const std::size_t data_offset = offset + 8U;
-        if (!checked_range(data_offset, length, bytes.size()) ||
-            !checked_range(data_offset + length, 4U, bytes.size())) {
-            return false;
-        }
-
-        const bool is_srgb = bytes[offset + 4U] == 's' && bytes[offset + 5U] == 'R' &&
-                             bytes[offset + 6U] == 'G' && bytes[offset + 7U] == 'B';
-        if (is_srgb && (length != 1U || bytes[data_offset] > 3U)) {
-            return true;
-        }
-        const bool is_gamma = bytes[offset + 4U] == 'g' && bytes[offset + 5U] == 'A' &&
-                              bytes[offset + 6U] == 'M' && bytes[offset + 7U] == 'A';
-        if (is_gamma && (length != 4U || read_be32_unchecked(bytes, data_offset) != canonical_srgb_gamma)) {
-            return true;
-        }
-        offset = data_offset + length + 4U;
-    }
-    return false;
-}
-
 [[nodiscard]] std::size_t tiff_type_size(std::uint16_t type) noexcept {
     switch (type) {
         case 3U: return 2U;
@@ -527,11 +489,7 @@ RasterDecodeResult decode_raster(RasterFormat format, std::span<const std::uint8
     try {
         switch (format) {
             case RasterFormat::Tiff: return decode_tiff(bytes);
-            case RasterFormat::Png:
-                if (png_has_invalid_srgb(bytes)) {
-                    return fail(RasterDecodeError::MalformedContainer);
-                }
-                return detail::decode_png(bytes);
+            case RasterFormat::Png: return detail::decode_png(bytes);
             case RasterFormat::Jpeg: return detail::decode_jpeg(bytes);
             case RasterFormat::Webp: return decode_webp_baseline(bytes);
             case RasterFormat::Unknown: return fail(RasterDecodeError::UnsupportedFormat);

@@ -569,6 +569,103 @@ struct DeflateHuffman {
     return true;
 }
 
+// PNG colour-space signalling recognised by this decoder. Canonical decoded
+// output is always sRGB primaries with the sRGB transfer function, so a chunk
+// describing a different colour space fails closed instead of being dropped
+// and silently relabelled sRGB.
+struct PngColorSpace {
+    bool seen_srgb{false};
+    bool seen_gama{false};
+    bool seen_chrm{false};
+    std::uint32_t gama{0U};
+};
+
+// gAMA carries the file gamma scaled by 100000. The sRGB transfer function is
+// signalled as 1/2.2 == 45455; any other value describes a transfer function
+// this decoder does not convert.
+constexpr std::uint32_t png_gama_srgb = 45455U;
+
+// cHRM carries chromaticities scaled by 100000, ordered white x/y, red x/y,
+// green x/y, blue x/y. These are the sRGB chromaticities.
+constexpr std::array<std::uint32_t, 8U> png_chrm_srgb{
+    31270U, 32900U, 64000U, 33000U, 30000U, 60000U, 15000U, 6000U};
+constexpr std::uint32_t png_chrm_srgb_tolerance = 1000U;
+
+[[nodiscard]] bool chunk_type_is(std::span<const std::uint8_t> type, const char* name) noexcept {
+    for (std::size_t i = 0U; i < 4U; ++i) {
+        if (type[i] != static_cast<std::uint8_t>(name[i])) {
+            return false;
+        }
+    }
+    return true;
+}
+
+[[nodiscard]] bool within_tolerance(std::uint32_t value, std::uint32_t expected, std::uint32_t tolerance) noexcept {
+    const std::uint32_t distance = value > expected ? value - expected : expected - value;
+    return distance <= tolerance;
+}
+
+// Accepts the colour-space chunks this decoder understands and rejects the
+// ones it cannot honour. Chunks unrelated to colour management are ignored.
+[[nodiscard]] RasterDecodeError accept_color_space_chunk(
+    std::span<const std::uint8_t> type,
+    std::span<const std::uint8_t> data,
+    bool seen_idat,
+    PngColorSpace& color) noexcept {
+    const bool is_srgb = chunk_type_is(type, "sRGB");
+    const bool is_gama = chunk_type_is(type, "gAMA");
+    const bool is_chrm = chunk_type_is(type, "cHRM");
+    const bool is_iccp = chunk_type_is(type, "iCCP");
+    if (!is_srgb && !is_gama && !is_chrm && !is_iccp) {
+        return RasterDecodeError::None;
+    }
+    // Colour-space chunks must precede the image data they describe.
+    if (seen_idat) {
+        return RasterDecodeError::MalformedContainer;
+    }
+    if (is_iccp) {
+        // Honouring an embedded ICC profile requires a colour management engine
+        // this decoder does not have, and ignoring it would mislabel the output.
+        return RasterDecodeError::UnsupportedFeature;
+    }
+    if (is_srgb) {
+        if (color.seen_srgb || data.size() != 1U || data[0U] > 3U) {
+            return RasterDecodeError::MalformedContainer;
+        }
+        color.seen_srgb = true;
+        return RasterDecodeError::None;
+    }
+    if (is_gama) {
+        if (color.seen_gama || data.size() != 4U) {
+            return RasterDecodeError::MalformedContainer;
+        }
+        color.seen_gama = true;
+        color.gama = read_be32(data, 0U);
+        return RasterDecodeError::None;
+    }
+    if (color.seen_chrm || data.size() != 32U) {
+        return RasterDecodeError::MalformedContainer;
+    }
+    color.seen_chrm = true;
+    for (std::size_t i = 0U; i < png_chrm_srgb.size(); ++i) {
+        if (!within_tolerance(read_be32(data, i * 4U), png_chrm_srgb[i], png_chrm_srgb_tolerance)) {
+            return RasterDecodeError::UnsupportedFeature;
+        }
+    }
+    return RasterDecodeError::None;
+}
+
+// A gAMA other than the canonical sRGB value describes a transfer function that
+// would have to be converted before the samples could be called sRGB. That
+// conversion is not implemented, so such files are rejected. The same rule
+// catches a gAMA that contradicts an accompanying sRGB chunk.
+[[nodiscard]] RasterDecodeError validate_color_space(const PngColorSpace& color) noexcept {
+    if (color.seen_gama && color.gama != png_gama_srgb) {
+        return RasterDecodeError::UnsupportedFeature;
+    }
+    return RasterDecodeError::None;
+}
+
 }  // namespace
 
 RasterDecodeResult decode_png(std::span<const std::uint8_t> bytes) {
@@ -587,6 +684,7 @@ RasterDecodeResult decode_png(std::span<const std::uint8_t> bytes) {
     std::uint8_t color_type = 0U;
     std::size_t bytes_per_pixel = 0U;
     std::vector<std::uint8_t> idat;
+    PngColorSpace color_space{};
 
     while (offset < bytes.size()) {
         if (!checked_range(offset, 12U, bytes.size())) {
@@ -667,12 +765,22 @@ RasterDecodeResult decode_png(std::span<const std::uint8_t> bytes) {
             if (critical) {
                 return {RasterDecodeError::UnsupportedFeature, {}};
             }
+            const RasterDecodeError color_error =
+                accept_color_space_chunk(type, data, seen_idat, color_space);
+            if (color_error != RasterDecodeError::None) {
+                return {color_error, {}};
+            }
         }
         offset = data_offset + length + 4U;
     }
 
     if (!seen_ihdr || !seen_idat || !seen_iend || offset != bytes.size()) {
         return {RasterDecodeError::MalformedContainer, {}};
+    }
+
+    const RasterDecodeError color_error = validate_color_space(color_space);
+    if (color_error != RasterDecodeError::None) {
+        return {color_error, {}};
     }
 
     const std::size_t width_size = static_cast<std::size_t>(width);
