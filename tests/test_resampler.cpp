@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <iostream>
+#include <limits>
 #include <string_view>
 #include <vector>
 
@@ -33,6 +34,64 @@ vektoryum::resample::FloatImage constant_image(
     const std::size_t count = static_cast<std::size_t>(width) * static_cast<std::size_t>(height) *
                               static_cast<std::size_t>(channels);
     return {width, height, channels, std::vector<float>(count, value)};
+}
+
+double mean_squared_error(const std::vector<float>& actual, const std::vector<float>& expected) {
+    if (actual.size() != expected.size() || actual.empty()) {
+        return std::numeric_limits<double>::infinity();
+    }
+    double squared_error = 0.0;
+    for (std::size_t index = 0U; index < actual.size(); ++index) {
+        const double delta = static_cast<double>(actual[index]) - static_cast<double>(expected[index]);
+        squared_error += delta * delta;
+    }
+    return squared_error / static_cast<double>(actual.size());
+}
+
+double psnr_unit_range(const std::vector<float>& actual, const std::vector<float>& expected) {
+    const double mse = mean_squared_error(actual, expected);
+    if (mse == 0.0) {
+        return std::numeric_limits<double>::infinity();
+    }
+    return 10.0 * std::log10(1.0 / mse);
+}
+
+double global_ssim_unit_range(const std::vector<float>& actual, const std::vector<float>& expected) {
+    if (actual.size() != expected.size() || actual.empty()) {
+        return -1.0;
+    }
+
+    double actual_mean = 0.0;
+    double expected_mean = 0.0;
+    for (std::size_t index = 0U; index < actual.size(); ++index) {
+        actual_mean += static_cast<double>(actual[index]);
+        expected_mean += static_cast<double>(expected[index]);
+    }
+    const double sample_count = static_cast<double>(actual.size());
+    actual_mean /= sample_count;
+    expected_mean /= sample_count;
+
+    double actual_variance = 0.0;
+    double expected_variance = 0.0;
+    double covariance = 0.0;
+    for (std::size_t index = 0U; index < actual.size(); ++index) {
+        const double actual_delta = static_cast<double>(actual[index]) - actual_mean;
+        const double expected_delta = static_cast<double>(expected[index]) - expected_mean;
+        actual_variance += actual_delta * actual_delta;
+        expected_variance += expected_delta * expected_delta;
+        covariance += actual_delta * expected_delta;
+    }
+    actual_variance /= sample_count;
+    expected_variance /= sample_count;
+    covariance /= sample_count;
+
+    constexpr double c1 = 0.01 * 0.01;
+    constexpr double c2 = 0.03 * 0.03;
+    const double luminance = (2.0 * actual_mean * expected_mean + c1) /
+                             (actual_mean * actual_mean + expected_mean * expected_mean + c1);
+    const double structure = (2.0 * covariance + c2) /
+                             (actual_variance + expected_variance + c2);
+    return luminance * structure;
 }
 
 void test_identity_is_exact() {
@@ -122,6 +181,73 @@ void test_downscale_antialiasing() {
     expect(*minimum >= 0.40F && *maximum <= 0.60F, "anti-alias gate suppresses high-frequency checker pattern");
 }
 
+void test_measured_roundtrip_fidelity() {
+    using namespace vektoryum::resample;
+    constexpr std::uint32_t width = 24U;
+    constexpr std::uint32_t height = 16U;
+    constexpr std::uint8_t channels = 3U;
+    FloatImage source{width, height, channels, std::vector<float>(static_cast<std::size_t>(width) * height * channels, 0.0F)};
+
+    for (std::uint32_t y = 0U; y < height; ++y) {
+        for (std::uint32_t x = 0U; x < width; ++x) {
+            const float fx = static_cast<float>(x) / static_cast<float>(width - 1U);
+            const float fy = static_cast<float>(y) / static_cast<float>(height - 1U);
+            source.pixels[source.index(x, y, 0U)] = fx;
+            source.pixels[source.index(x, y, 1U)] = fy;
+            source.pixels[source.index(x, y, 2U)] = (0.65F * fx) + (0.35F * fy);
+        }
+    }
+
+    const ResampleResult upscaled = resize(source, width * 4U, height * 4U);
+    expect(upscaled.ok(), "quality fixture 4x upscale succeeds");
+    if (!upscaled.ok()) {
+        return;
+    }
+    const ResampleResult restored = resize(upscaled.image, width, height);
+    expect(restored.ok(), "quality fixture downscale succeeds");
+    if (!restored.ok()) {
+        return;
+    }
+
+    const double psnr = psnr_unit_range(restored.image.pixels, source.pixels);
+    const double ssim = global_ssim_unit_range(restored.image.pixels, source.pixels);
+    expect(psnr >= 35.0, "PSNR regression gate: smooth RGB roundtrip >= 35 dB");
+    expect(ssim >= 0.98, "SSIM regression gate: smooth RGB roundtrip >= 0.98");
+}
+
+void test_premultiplied_alpha_edge_does_not_leak_hidden_rgb() {
+    using namespace vektoryum::resample;
+    FloatImage source{
+        4U,
+        1U,
+        4U,
+        {
+            0.0F, 0.0F, 0.0F, 0.0F,
+            0.0F, 0.0F, 0.0F, 0.0F,
+            1.0F, 0.0F, 0.0F, 1.0F,
+            1.0F, 0.0F, 0.0F, 1.0F,
+        },
+    };
+    const ResampleResult result = resize(source, 64U, 1U);
+    expect(result.ok(), "premultiplied-alpha edge upscale succeeds");
+    if (!result.ok()) {
+        return;
+    }
+
+    bool no_hidden_green_blue = true;
+    bool premultiplied_constraint = true;
+    for (std::uint32_t x = 0U; x < result.image.width; ++x) {
+        const float red = result.image.pixels[result.image.index(x, 0U, 0U)];
+        const float green = result.image.pixels[result.image.index(x, 0U, 1U)];
+        const float blue = result.image.pixels[result.image.index(x, 0U, 2U)];
+        const float alpha = result.image.pixels[result.image.index(x, 0U, 3U)];
+        no_hidden_green_blue = no_hidden_green_blue && std::abs(green) <= 1.0e-7F && std::abs(blue) <= 1.0e-7F;
+        premultiplied_constraint = premultiplied_constraint && red <= alpha + 1.0e-6F;
+    }
+    expect(no_hidden_green_blue, "alpha-fringe regression gate: transparent edge cannot introduce hidden RGB");
+    expect(premultiplied_constraint, "alpha-fringe regression gate: RGB remains bounded by alpha");
+}
+
 void test_determinism_and_validation() {
     using namespace vektoryum::resample;
     const FloatImage source{3U, 2U, 1U, {0.0F, 0.2F, 0.8F, 1.0F, 0.4F, 0.6F}};
@@ -154,6 +280,8 @@ int run_resampler_tests() {
     test_step_has_no_overshoot();
     test_linear_ramp_shape();
     test_downscale_antialiasing();
+    test_measured_roundtrip_fidelity();
+    test_premultiplied_alpha_edge_does_not_leak_hidden_rgb();
     test_determinism_and_validation();
     return resampler_failures;
 }
