@@ -155,6 +155,10 @@ add_executable(vektoryum_raster_decode_tests tests/test_raster_decode.cpp)
 target_link_libraries(vektoryum_raster_decode_tests PRIVATE vektoryum_core)
 vektoryum_apply_warnings(vektoryum_raster_decode_tests)
 
+add_executable(vektoryum_png_dynamic_tests tests/test_png_dynamic.cpp)
+target_link_libraries(vektoryum_png_dynamic_tests PRIVATE vektoryum_core)
+vektoryum_apply_warnings(vektoryum_png_dynamic_tests)
+
 if(VEKTORYUM_ENABLE_SANITIZERS AND NOT MSVC)
     foreach(target
         vektoryum_tests
@@ -175,7 +179,8 @@ if(VEKTORYUM_ENABLE_SANITIZERS AND NOT MSVC)
         vektoryum_package_inventory_tests
         vektoryum_package_contents_tests
         vektoryum_package_identity_tests
-        vektoryum_raster_decode_tests)
+        vektoryum_raster_decode_tests
+        vektoryum_png_dynamic_tests)
         target_compile_options(${target} PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
         target_link_options(${target} PRIVATE -fsanitize=address,undefined)
     endforeach()
@@ -200,3 +205,4 @@ add_test(NAME vektoryum.package_inventory COMMAND vektoryum_package_inventory_te
 add_test(NAME vektoryum.package_contents COMMAND vektoryum_package_contents_tests)
 add_test(NAME vektoryum.package_identity COMMAND vektoryum_package_identity_tests)
 add_test(NAME vektoryum.raster_decode COMMAND vektoryum_raster_decode_tests)
+add_test(NAME vektoryum.png_dynamic COMMAND vektoryum_png_dynamic_tests)
