@@ -2,9 +2,9 @@
 
 Contract/infrastructure roadmap completion: **100%**
 
-Functional end-user product readiness: **corrective R2 complete; R3 is next**.
+Functional end-user product readiness: **corrective R3 complete; R4 is next**.
 
-The Stage 0-13 contract roadmap is complete, but that does **not** mean the end-user raster-to-vector/upscale product is complete. Corrective R1 and R2 now establish real Release builds plus bounded real PNG/JPEG/WebP/TIFF ingestion, canonical color/alpha normalization and deterministic CLI `--convert` coverage. Product readiness will return to 100% only after the remaining R3-R6 acceptance gaps are implemented and independently tested: resampler quality/root-cause correction, curve recovery, geometry-backed SVG/PDF/EPS/DXF export, and one complete real-input end-to-end certified conversion chain.
+The Stage 0-13 contract roadmap is complete, but that does **not** mean the end-user raster-to-vector/upscale product is complete. Corrective R1-R3 now establish real Release builds, bounded real PNG/JPEG/WebP/TIFF ingestion, canonical color/alpha normalization, deterministic CLI `--convert` coverage, and a measured resampler artifact correction guarded by PSNR/SSIM and visual-regression acceptance tests. Product readiness will return to 100% only after the remaining R4-R6 acceptance gaps are implemented and independently tested: curve recovery, geometry-backed SVG/PDF/EPS/DXF export, and one complete real-input end-to-end certified conversion chain.
 
 Workflow: branch → pull request → CI → merge only after all required checks pass.
 
@@ -35,7 +35,7 @@ The post-roadmap visual audit exposed gaps that the contract-focused acceptance 
 |---|---|---|
 | R1 | Real Release builds on Linux/macOS/Windows with warnings-as-errors and meaningful tests | complete |
 | R2 | PNG/JPEG/WebP/TIFF decode, color/alpha handling and CLI `convert` | complete |
-| R3 | Resampler artifact/root-cause fix plus fixture PSNR/SSIM and visual regression gates | pending |
+| R3 | Resampler artifact/root-cause fix plus fixture PSNR/SSIM and visual regression gates | complete |
 | R4 | Curve recovery as cubic Bézier/arc with fidelity-bounded node reduction | pending |
 | R5 | Real scene-backed SVG/PDF/EPS/DXF encoders validated by standard readers | pending |
 | R6 | Real input → analysis → upscale/vector → export → quality certificate end-to-end acceptance | pending |
@@ -56,7 +56,14 @@ The post-roadmap visual audit exposed gaps that the contract-focused acceptance 
 - WebP acceptance exercises real multi-pixel lossless VP8L fixtures including RGB/alpha, palette/transform/predictor/back-reference behavior and deterministic decode.
 - TIFF acceptance covers supported Gray/RGB/RGBA, byte-order/strip handling and associated-alpha normalization.
 - CLI `--convert INPUT OUTPUT` is exercised across PNG/JPEG/WebP/TIFF and emits deterministic canonical PAM RGBA8 output.
-- R2 acceptance was green on exact HEAD `4d819dd83071038df40ae5c2dea912c41adbb34e` with `core-ci #288`; the README update itself must receive a fresh exact-head green run before merge.
+
+### R3 — complete
+
+- The separable resampler no longer clamps the horizontal intermediate pass; production local-range clamping is applied to the final reconstructed sample against the original 2D contributing source neighborhood, removing the axis-biased clipping mechanism without changing half-pixel mapping, Lanczos-3 reconstruction, normalized weights, anti-alias behavior or production clamping policy.
+- Fixture-based measured quality gates require smooth-RGB round-trip PSNR ≥ 35 dB and SSIM ≥ 0.98.
+- Premultiplied-alpha regression coverage prevents transparent-edge hidden-RGB leakage and keeps reconstructed RGB bounded by alpha.
+- An 8× transpose-invariance visual-regression fixture gates horizontal/vertical artifact bias with a maximum axis delta of 1e-5.
+- R3 implementation acceptance is green on exact HEAD `532483811d8cc33c454b8115fdf79e36d234435a` with `core-ci #294`. This README status commit must itself receive a fresh exact-head green run before R3 is merged.
 
 ## Verified contract milestones
 
@@ -68,9 +75,8 @@ These milestones remain valuable and are not being weakened. They are prerequisi
 
 ## Current corrective priority
 
-1. Fix measured logo/resampler artifacts at their algorithmic root cause and add objective PSNR/SSIM/visual regression gates.
-2. Recover real curves with bounded node complexity.
-3. Connect all four exporters to real scene geometry and validate generated files.
-4. Certify one complete real-user conversion chain end to end.
+1. Recover real curves as cubic Bézier/arc geometry while reducing node count only under fidelity gates.
+2. Connect all four exporters to real scene geometry and validate generated files with standard readers.
+3. Certify one complete real-user conversion chain end to end.
 
 UI, account and subscription work remains deferred until functional product readiness reaches 100%.
