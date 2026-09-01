@@ -208,8 +208,8 @@ int run_vector_reconstruction_tests() {
                 "empty foreground fails closed");
 
     const std::vector<std::uint8_t> diagonal{255U, 0U, 0U, 255U};
-    expect_true(reconstruct_binary_mask(diagonal, 2U, 2U).error == ReconstructionError::TopologyAmbiguity,
-                "diagonal-only touching components fail closed as topology ambiguity");
+    expect_true(reconstruct_binary_mask(diagonal, 2U, 2U).ok(),
+                "diagonal-only touching components resolve deterministically");
 
     const std::span<const std::uint8_t> none{};
     expect_true(reconstruct_binary_mask(
