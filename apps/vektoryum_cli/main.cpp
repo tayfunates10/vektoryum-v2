@@ -363,7 +363,7 @@ int run_certified_convert(
             return static_cast<std::uint8_t>(vektoryum::vector::coverage_is_foreground(value));
         });
     vektoryum::certification::CanonicalQualityFixture quality_fixture;
-    quality_fixture.reference_alpha = alpha;
+    quality_fixture.reference_alpha = has_transparency ? alpha : mask;
     quality_fixture.candidate_alpha = candidate_alpha;
     quality_fixture.reference_vector_mask = certification_mask;
     quality_fixture.candidate_vector_mask = candidate_mask;
