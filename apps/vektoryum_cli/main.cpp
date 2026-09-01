@@ -306,7 +306,7 @@ int run_certified_convert(
         mask.begin(),
         mask.end(),
         certification_mask.begin(),
-        [](std::uint8_t value) { return value == 0U ? 0U : 1U; });
+        [](std::uint8_t value) { return static_cast<std::uint8_t>(value != 0U); });
     const auto fidelity = vektoryum::vector::certify_svg_scene(
         fitted.scene,
         certification_mask,
@@ -348,10 +348,15 @@ int run_certified_convert(
         return static_cast<int>(vektoryum::api::ExitCode::Data);
     }
 
-    const auto candidate_mask = vektoryum::vector::rasterize_even_odd(
+    auto candidate_mask = vektoryum::vector::rasterize_even_odd(
         reconstructed.scene,
         decoded.image.spec.width,
         decoded.image.spec.height);
+    std::transform(
+        candidate_mask.begin(),
+        candidate_mask.end(),
+        candidate_mask.begin(),
+        [](std::uint8_t value) { return static_cast<std::uint8_t>(value != 0U); });
     vektoryum::certification::CanonicalQualityFixture quality_fixture;
     quality_fixture.reference_alpha = alpha;
     quality_fixture.candidate_alpha = alpha;
