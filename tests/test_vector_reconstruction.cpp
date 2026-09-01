@@ -208,8 +208,18 @@ int run_vector_reconstruction_tests() {
                 "empty foreground fails closed");
 
     const std::vector<std::uint8_t> diagonal{255U, 0U, 0U, 255U};
-    expect_true(reconstruct_binary_mask(diagonal, 2U, 2U).ok(),
-                "diagonal-only touching components resolve deterministically");
+    const auto diagonal_a = reconstruct_binary_mask(diagonal, 2U, 2U);
+    const auto diagonal_b = reconstruct_binary_mask(diagonal, 2U, 2U);
+    expect_true(diagonal_a.ok() && diagonal_b.ok() && diagonal_a.scene.paths.size() == 2U &&
+                    diagonal_b.scene.paths.size() == diagonal_a.scene.paths.size() &&
+                    diagonal_b.scene.paths[0].points == diagonal_a.scene.paths[0].points &&
+                    diagonal_b.scene.paths[1].points == diagonal_a.scene.paths[1].points,
+                "diagonal-only touching components resolve into deterministic contours");
+    const auto diagonal_raster = rasterize_even_odd(diagonal_a.scene, 2U, 2U);
+    const auto diagonal_quality = certify_scene(diagonal_a.scene, diagonal, 2U, 2U);
+    expect_true(binary_iou(diagonal, diagonal_raster) == 1.0 && diagonal_quality.passed() &&
+                    diagonal_quality.raster_iou == 1.0 && diagonal_quality.disagreement_ratio == 0.0,
+                "diagonal saddle topology round-trips with exact fidelity");
 
     const std::span<const std::uint8_t> none{};
     expect_true(reconstruct_binary_mask(
