@@ -7,6 +7,19 @@
 
 namespace vektoryum::vector {
 
+inline constexpr std::uint8_t canonical_coverage_threshold{128U};
+
+[[nodiscard]] constexpr bool coverage_is_foreground(
+    std::uint8_t value,
+    std::uint8_t threshold = canonical_coverage_threshold) noexcept {
+    return value >= threshold;
+}
+
+static_assert(!coverage_is_foreground(0U));
+static_assert(!coverage_is_foreground(127U));
+static_assert(coverage_is_foreground(128U));
+static_assert(coverage_is_foreground(255U));
+
 struct IntPoint {
     std::int32_t x{};
     std::int32_t y{};
@@ -39,7 +52,7 @@ enum class ReconstructionError : std::uint8_t {
 };
 
 struct ReconstructionOptions {
-    std::uint8_t threshold{128U};
+    std::uint8_t threshold{canonical_coverage_threshold};
     std::size_t max_nodes{1'000'000U};
 };
 
