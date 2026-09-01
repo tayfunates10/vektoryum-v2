@@ -301,9 +301,15 @@ int run_certified_convert(
         std::cerr << "error: SVG path fitting rejected reconstructed geometry\n";
         return static_cast<int>(vektoryum::api::ExitCode::Data);
     }
+    std::vector<std::uint8_t> certification_mask(mask.size(), 0U);
+    std::transform(
+        mask.begin(),
+        mask.end(),
+        certification_mask.begin(),
+        [](std::uint8_t value) { return value == 0U ? 0U : 1U; });
     const auto fidelity = vektoryum::vector::certify_svg_scene(
         fitted.scene,
-        mask,
+        certification_mask,
         decoded.image.spec.width,
         decoded.image.spec.height);
     if (!fidelity.passed()) {
