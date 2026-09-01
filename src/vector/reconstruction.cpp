@@ -74,11 +74,11 @@ void remove_collinear(std::vector<IntPoint>& points) {
         const auto cross = in_dx * out_dy - in_dy * out_dx;
         const auto dot = in_dx * out_dx + in_dy * out_dy;
         int priority = 3;
-        if (cross < 0) {
+        if (cross > 0) {
             priority = 0;
         } else if (cross == 0 && dot > 0) {
             priority = 1;
-        } else if (cross > 0) {
+        } else if (cross < 0) {
             priority = 2;
         }
         if (priority < best_priority ||
