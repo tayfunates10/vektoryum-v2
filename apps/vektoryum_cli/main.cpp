@@ -355,7 +355,7 @@ int run_certified_convert(
     vektoryum::certification::CanonicalQualityFixture quality_fixture;
     quality_fixture.reference_alpha = alpha;
     quality_fixture.candidate_alpha = alpha;
-    quality_fixture.reference_vector_mask = mask;
+    quality_fixture.reference_vector_mask = certification_mask;
     quality_fixture.candidate_vector_mask = candidate_mask;
     const auto quality = vektoryum::certification::measure_canonical_quality_metrics(quality_fixture);
     const auto performance = vektoryum::certification::measure_canonical_export_metrics(
