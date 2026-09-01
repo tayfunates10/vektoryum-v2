@@ -57,6 +57,40 @@ void remove_collinear(std::vector<IntPoint>& points) {
     points = std::move(out);
 }
 
+[[nodiscard]] std::size_t select_next_edge(
+    const std::vector<Edge>& edges,
+    std::size_t incoming,
+    const std::vector<std::size_t>& candidates) noexcept {
+    const auto in_dx = static_cast<std::int64_t>(edges[incoming].b.x) - edges[incoming].a.x;
+    const auto in_dy = static_cast<std::int64_t>(edges[incoming].b.y) - edges[incoming].a.y;
+    std::size_t best = edges.size();
+    int best_priority = 4;
+    for (const auto candidate : candidates) {
+        if (edges[candidate].used) {
+            continue;
+        }
+        const auto out_dx = static_cast<std::int64_t>(edges[candidate].b.x) - edges[candidate].a.x;
+        const auto out_dy = static_cast<std::int64_t>(edges[candidate].b.y) - edges[candidate].a.y;
+        const auto cross = in_dx * out_dy - in_dy * out_dx;
+        const auto dot = in_dx * out_dx + in_dy * out_dy;
+        int priority = 3;
+        if (cross < 0) {
+            priority = 0;
+        } else if (cross == 0 && dot > 0) {
+            priority = 1;
+        } else if (cross > 0) {
+            priority = 2;
+        }
+        if (priority < best_priority ||
+            (priority == best_priority &&
+             (best == edges.size() || less_point(edges[candidate].b, edges[best].b)))) {
+            best = candidate;
+            best_priority = priority;
+        }
+    }
+    return best;
+}
+
 [[nodiscard]] bool point_in_path(double x, double y, const Path& path) noexcept {
     bool inside = false;
     const auto n = path.points.size();
@@ -173,10 +207,6 @@ ReconstructionResult reconstruct_binary_mask(
         std::sort(indices.begin(), indices.end(), [&](std::size_t lhs, std::size_t rhs) {
             return less_point(edges[lhs].b, edges[rhs].b);
         });
-        if (indices.size() != 1U) {
-            result.error = ReconstructionError::TopologyAmbiguity;
-            return result;
-        }
     }
 
     for (std::size_t seed = 0U; seed < edges.size(); ++seed) {
@@ -198,12 +228,12 @@ ReconstructionResult reconstruct_binary_mask(
                 break;
             }
             const auto it = outgoing.find({next.x, next.y});
-            if (it == outgoing.end() || it->second.size() != 1U) {
+            if (it == outgoing.end()) {
                 result.error = ReconstructionError::BrokenContour;
                 return result;
             }
-            current = it->second.front();
-            if (edges[current].used) {
+            current = select_next_edge(edges, current, it->second);
+            if (current == edges.size()) {
                 result.error = ReconstructionError::BrokenContour;
                 return result;
             }
