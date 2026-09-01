@@ -2,9 +2,9 @@
 
 Contract/infrastructure roadmap completion: **100%**
 
-Functional end-user product readiness: **corrective R5 implementation complete; R6 is next after exact-head merge evidence**.
+Functional end-user product readiness: **corrective R1-R6 implementation complete; final README exact-head CI/merge evidence pending**.
 
-The Stage 0-13 contract roadmap is complete, but that does **not** mean the end-user raster-to-vector/upscale product is complete. Corrective R1-R5 now establish real Release builds, bounded real PNG/JPEG/WebP/TIFF ingestion, canonical color/alpha normalization, deterministic CLI `--convert` coverage, a measured resampler artifact correction guarded by PSNR/SSIM and visual-regression acceptance tests, certified cubic curve recovery with fidelity-bounded node reduction, and real scene-backed SVG/PDF/EPS/DXF emission with format-aware structural validation. Product readiness will return to 100% only after the remaining R6 acceptance gap is implemented and independently tested: one complete real-input end-to-end certified conversion chain.
+The Stage 0-13 contract roadmap is complete, but that alone did **not** prove the end-user raster-to-vector/upscale product. Corrective R1-R6 now establish real Release builds, bounded real PNG/JPEG/WebP/TIFF ingestion, canonical color/alpha normalization, deterministic CLI `--convert` coverage, a measured resampler artifact correction guarded by PSNR/SSIM and visual-regression acceptance tests, certified cubic curve recovery with fidelity-bounded node reduction, real scene-backed SVG/PDF/EPS/DXF emission with format-aware structural validation, and one complete real-input analysis → 2× upscale → vector reconstruction → geometry export → measured quality-certificate CLI chain. Product readiness is functionally complete; merge remains blocked until this README status commit itself receives fresh exact-head green CI evidence and all merge gates remain satisfied.
 
 Workflow: branch → pull request → CI → merge only after all required checks pass.
 
@@ -38,7 +38,7 @@ The post-roadmap visual audit exposed gaps that the contract-focused acceptance 
 | R3 | Resampler artifact/root-cause fix plus fixture PSNR/SSIM and visual regression gates | complete |
 | R4 | Curve recovery as cubic Bézier/arc with fidelity-bounded node reduction | complete |
 | R5 | Real scene-backed SVG/PDF/EPS/DXF encoders validated by format-aware structural checks | complete |
-| R6 | Real input → analysis → upscale/vector → export → quality certificate end-to-end acceptance | pending |
+| R6 | Real input → analysis → upscale/vector → export → quality certificate end-to-end acceptance | implementation complete; README CI pending |
 
 ## Verified corrective milestones
 
@@ -79,7 +79,15 @@ The post-roadmap visual audit exposed gaps that the contract-focused acceptance 
 - Linear and cubic path geometry is preserved in each format; even-odd fill semantics are retained for SVG/PDF/EPS and cubic curves are represented as DXF SPLINE entities.
 - Geometry export remains behind the existing request/provenance/output-byte contract checks and rejects empty or structurally invalid scenes.
 - Format-aware artifact validation rejects malformed SVG/PDF/EPS/DXF structures, while regression coverage proves exported digests change when reconstructed geometry changes.
-- R5 implementation acceptance is green on exact HEAD `1b8fdaae750e5a9d4b098c266d5f0212be6e54dc` with `core-ci #303`. This README status commit must itself receive a fresh exact-head green run before R5 is merged.
+- R5 implementation acceptance is green on exact HEAD `1b8fdaae750e5a9d4b098c266d5f0212be6e54dc` with `core-ci #303`; its README status commit subsequently received fresh exact-head green evidence before merge.
+
+### R6 — implementation complete; final README CI pending
+
+- CLI `--certified-convert INPUT OUTPUT FORMAT` executes a real bounded raster input through decode, content analysis, canonical linear-light premultiplied-alpha preparation, Lanczos3 2× upscale, vector reconstruction, cubic path fitting/fidelity certification, geometry-backed SVG/PDF/EPS/DXF export, measured quality/performance evidence and provenance-bound quality-certificate issuance.
+- Upscale evidence is bound into the chain identity with SHA-256; export and certificate identities remain tied to real input-derived provenance.
+- Fidelity certification retains the existing `IoU ≥ 0.995` and disagreement ratio `≤ 0.005` gates; binary mask normalization fixes representation mismatches without weakening acceptance.
+- CLI integration executes the end-to-end path for SVG, PDF, EPS and DXF and requires real non-empty export/certificate artifacts plus measured evidence.
+- R6 implementation acceptance is green on exact HEAD `38fd9299768d8846b88a88f9f137e687c1d57f6f` with `core-ci #317`, with `mergeable=true` and zero unresolved blocking review threads at verification time. This README status commit must itself receive a fresh exact-head green run before R6 is merged.
 
 ## Verified contract milestones
 
@@ -91,6 +99,8 @@ These milestones remain valuable and are not being weakened. They are prerequisi
 
 ## Current corrective priority
 
-1. Certify one complete real-user conversion chain from real raster input through analysis/upscale-or-vector reconstruction, geometry-backed export and quality certificate.
+1. Obtain fresh exact-head green CI evidence for this R6 README status commit.
+2. Re-verify `mergeable=true` and zero unresolved blocking review threads.
+3. Merge R6 only with expected-head protection after all acceptance evidence remains green.
 
-UI, account and subscription work remains deferred until functional product readiness reaches 100%.
+UI, account and subscription work remains deferred until the corrective R6 merge is complete.
