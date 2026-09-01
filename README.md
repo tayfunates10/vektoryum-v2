@@ -2,11 +2,11 @@
 
 Contract/infrastructure roadmap completion: **100%**
 
-Functional end-user product readiness: **corrective R1-R6 implementation complete; final README exact-head CI/merge evidence pending**.
+Functional end-user product readiness: **post-R6 real-user corrective program active; U1 implementation acceptance complete, README exact-head CI pending**.
 
-The Stage 0-13 contract roadmap is complete, but that alone did **not** prove the end-user raster-to-vector/upscale product. Corrective R1-R6 now establish real Release builds, bounded real PNG/JPEG/WebP/TIFF ingestion, canonical color/alpha normalization, deterministic CLI `--convert` coverage, a measured resampler artifact correction guarded by PSNR/SSIM and visual-regression acceptance tests, certified cubic curve recovery with fidelity-bounded node reduction, real scene-backed SVG/PDF/EPS/DXF emission with format-aware structural validation, and one complete real-input analysis → 2× upscale → vector reconstruction → geometry export → measured quality-certificate CLI chain. Product readiness is functionally complete; merge remains blocked until this README status commit itself receives fresh exact-head green CI evidence and all merge gates remain satisfied.
+The Stage 0-13 contract roadmap and corrective R1-R6 implementation are complete, but a 2026-09-01 real-user audit proved that this still does **not** establish general-user raster-to-vector readiness. The measured audit exposed alpha/coverage semantic inconsistency, topology ambiguity on realistic contours, broken serialized SVG hole semantics, loss of source colors, certification that was not derived from the final serialized output, an upscale path that did not feed reconstruction, and cubic recovery that was not exercised by the real CLI path. These are tracked as a strict post-R6 U1-U8 corrective program. Existing quality thresholds, provenance, sanitizer behavior, API/CLI contracts and fail-closed acceptance gates remain immutable unless a later roadmap stage explicitly adds a stricter gate.
 
-Workflow: branch → pull request → CI → merge only after all required checks pass.
+Workflow: branch → pull request → exact-head CI → merge only after all required checks pass.
 
 ## Contract roadmap
 
@@ -27,9 +27,9 @@ Workflow: branch → pull request → CI → merge only after all required check
 | 12 | Stable CLI/Core API contracts | 3% | done |
 | 13 | Release hardening contracts | 3% | done |
 
-## Product-readiness corrective roadmap
+## Product-readiness corrective roadmap R1-R6
 
-The post-roadmap visual audit exposed gaps that the contract-focused acceptance suite did not prove. The corrective program is therefore tracked separately from the completed contract roadmap.
+The post-roadmap visual audit exposed gaps that the contract-focused acceptance suite did not prove. The first corrective program is tracked separately from the completed contract roadmap.
 
 | Corrective stage | Acceptance goal | Status |
 |---|---|---|
@@ -38,9 +38,34 @@ The post-roadmap visual audit exposed gaps that the contract-focused acceptance 
 | R3 | Resampler artifact/root-cause fix plus fixture PSNR/SSIM and visual regression gates | complete |
 | R4 | Curve recovery as cubic Bézier/arc with fidelity-bounded node reduction | complete |
 | R5 | Real scene-backed SVG/PDF/EPS/DXF encoders validated by format-aware structural checks | complete |
-| R6 | Real input → analysis → upscale/vector → export → quality certificate end-to-end acceptance | implementation complete; README CI pending |
+| R6 | Real input → analysis → upscale/vector → export → quality certificate end-to-end acceptance | complete |
 
-## Verified corrective milestones
+## Post-R6 real-user corrective roadmap U1-U8
+
+| Corrective stage | Acceptance goal | Status |
+|---|---|---|
+| U1 | One canonical alpha/coverage semantic across reconstruction, rasterize-back, quality and certification; soft-alpha regression | implementation complete; README exact-head CI pending |
+| U2 | Deterministic saddle/diagonal topology resolution instead of rejecting realistic contour ambiguity | pending |
+| U3 | Compound-path hole hierarchy and serialized SVG hole semantics validated from emitted output | pending |
+| U4 | Preserve color regions/layers/fills and honor analyzer routing instead of forcing all inputs through binary vectorization | pending |
+| U5 | Derive final certification from independently rasterized serialized output with real alpha/color/component-hole/boundary/residual metrics | pending |
+| U6 | Feed the actual upscale result into reconstruction or fail the claimed upscale chain | pending |
+| U7 | Enable fidelity-gated cubic fitting on the real CLI production path | pending |
+| U8 | Lock the eight real-user fixtures and production component/residual/boundary gates without weakening existing vector gates | pending |
+
+## Verified post-R6 milestones
+
+### U1 — implementation complete; README CI pending
+
+- `canonical_coverage_threshold` is explicitly fixed at 128 and `coverage_is_foreground()` is the shared foreground definition.
+- Reconstruction defaults, certification-mask normalization and rasterize-back candidate-mask normalization now use the same canonical `coverage >= 128` semantic; the previous `>=128` versus `!=0` mismatch is removed without changing the threshold.
+- Soft-alpha source coverage is preserved as the quality reference for transparent inputs, while opaque binary-vector inputs use the actual reconstruction mask as the alpha reference rather than an unrelated all-255 source-alpha plane.
+- Candidate alpha is measured from rasterized reconstructed geometry instead of assigning the source alpha to both reference and candidate.
+- Regression coverage locks the 127/128 boundary and proves rasterize-back IoU is exact when the same canonical coverage definition is used.
+- Existing vector fidelity gates remain unchanged: `IoU >= 0.995` and disagreement ratio `<= 0.005`. Existing quality, provenance, sanitizer, API/CLI and fail-closed contracts are unchanged.
+- U1 implementation acceptance is green on exact HEAD `18baf1dc5976ce7d18c86c3bc06e7bc6f3da98be` with `core-ci #326`; PR #22 was `mergeable=true` with zero unresolved blocking review threads at verification time. This README status commit must receive fresh exact-head green CI before U1 can merge.
+
+## Verified corrective milestones R1-R6
 
 ### R1 — complete
 
@@ -81,13 +106,13 @@ The post-roadmap visual audit exposed gaps that the contract-focused acceptance 
 - Format-aware artifact validation rejects malformed SVG/PDF/EPS/DXF structures, while regression coverage proves exported digests change when reconstructed geometry changes.
 - R5 implementation acceptance is green on exact HEAD `1b8fdaae750e5a9d4b098c266d5f0212be6e54dc` with `core-ci #303`; its README status commit subsequently received fresh exact-head green evidence before merge.
 
-### R6 — implementation complete; final README CI pending
+### R6 — complete
 
 - CLI `--certified-convert INPUT OUTPUT FORMAT` executes a real bounded raster input through decode, content analysis, canonical linear-light premultiplied-alpha preparation, Lanczos3 2× upscale, vector reconstruction, cubic path fitting/fidelity certification, geometry-backed SVG/PDF/EPS/DXF export, measured quality/performance evidence and provenance-bound quality-certificate issuance.
 - Upscale evidence is bound into the chain identity with SHA-256; export and certificate identities remain tied to real input-derived provenance.
 - Fidelity certification retains the existing `IoU ≥ 0.995` and disagreement ratio `≤ 0.005` gates; binary mask normalization fixes representation mismatches without weakening acceptance.
 - CLI integration executes the end-to-end path for SVG, PDF, EPS and DXF and requires real non-empty export/certificate artifacts plus measured evidence.
-- R6 implementation acceptance is green on exact HEAD `38fd9299768d8846b88a88f9f137e687c1d57f6f` with `core-ci #317`, with `mergeable=true` and zero unresolved blocking review threads at verification time. This README status commit must itself receive a fresh exact-head green run before R6 is merged.
+- R6 was merged after exact-head green CI and merge-gate verification; the later real-user audit is the authority for the U1-U8 corrective work and supersedes any earlier broad product-readiness claim.
 
 ## Verified contract milestones
 
@@ -99,8 +124,9 @@ These milestones remain valuable and are not being weakened. They are prerequisi
 
 ## Current corrective priority
 
-1. Obtain fresh exact-head green CI evidence for this R6 README status commit.
+1. Obtain fresh exact-head green CI evidence for the U1 README status commit.
 2. Re-verify `mergeable=true` and zero unresolved blocking review threads.
-3. Merge R6 only with expected-head protection after all acceptance evidence remains green.
+3. Merge U1 only with expected-head protection after all U1 acceptance evidence remains green.
+4. Open U2 only after U1 is merged, then proceed sequentially through U8.
 
-UI, account and subscription work remains deferred until the corrective R6 merge is complete.
+UI, account and subscription work remains deferred until the post-R6 real-user corrective program reaches its required acceptance state.
