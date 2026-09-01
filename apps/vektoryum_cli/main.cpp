@@ -10,10 +10,12 @@
 #include "vektoryum/analysis/content_analyzer.hpp"
 #include "vektoryum/api/stable_api.hpp"
 #include "vektoryum/certification/quality_certificate.hpp"
+#include "vektoryum/core/color.hpp"
 #include "vektoryum/export/canonical_encoder.hpp"
 #include "vektoryum/io/raster_decode.hpp"
 #include "vektoryum/io/raster_input.hpp"
 #include "vektoryum/ml/artifact_digest.hpp"
+#include "vektoryum/resample/resampler.hpp"
 #include "vektoryum/vector/reconstruction.hpp"
 #include "vektoryum/vector/svg_path.hpp"
 #include "vektoryum/version.hpp"
@@ -211,6 +213,11 @@ int run_certified_convert(
     bool has_transparency = false;
     std::vector<std::uint8_t> alpha;
     alpha.reserve(static_cast<std::size_t>(pixel_count));
+    vektoryum::resample::FloatImage upscale_source;
+    upscale_source.width = decoded.image.spec.width;
+    upscale_source.height = decoded.image.spec.height;
+    upscale_source.channels = 4U;
+    upscale_source.pixels.reserve(static_cast<std::size_t>(pixel_count) * 4U);
     for (std::size_t i = 0U; i < decoded.image.rgba8.size(); i += 4U) {
         rgb.push_back(static_cast<float>(decoded.image.rgba8[i]) / 255.0F);
         rgb.push_back(static_cast<float>(decoded.image.rgba8[i + 1U]) / 255.0F);
@@ -218,6 +225,19 @@ int run_certified_convert(
         const std::uint8_t a = decoded.image.rgba8[i + 3U];
         alpha.push_back(a);
         has_transparency = has_transparency || a != 255U;
+
+        const double alpha_unit = static_cast<double>(a) / 255.0;
+        const vektoryum::core::Rgba64 linear_straight{
+            vektoryum::core::srgb_to_linear(static_cast<double>(decoded.image.rgba8[i]) / 255.0),
+            vektoryum::core::srgb_to_linear(static_cast<double>(decoded.image.rgba8[i + 1U]) / 255.0),
+            vektoryum::core::srgb_to_linear(static_cast<double>(decoded.image.rgba8[i + 2U]) / 255.0),
+            alpha_unit,
+        };
+        const auto premultiplied = vektoryum::core::premultiply_alpha(linear_straight);
+        upscale_source.pixels.push_back(static_cast<float>(premultiplied.r));
+        upscale_source.pixels.push_back(static_cast<float>(premultiplied.g));
+        upscale_source.pixels.push_back(static_cast<float>(premultiplied.b));
+        upscale_source.pixels.push_back(static_cast<float>(premultiplied.a));
     }
 
     const auto analysis = vektoryum::analysis::analyze_rgb_f32(
@@ -229,6 +249,30 @@ int run_certified_convert(
         std::cerr << "error: content analysis rejected decoded raster\n";
         return static_cast<int>(vektoryum::api::ExitCode::Data);
     }
+
+    if (decoded.image.spec.width > std::numeric_limits<std::uint32_t>::max() / 2U ||
+        decoded.image.spec.height > std::numeric_limits<std::uint32_t>::max() / 2U) {
+        std::cerr << "error: upscale dimensions overflow\n";
+        return static_cast<int>(vektoryum::api::ExitCode::Data);
+    }
+    const std::uint32_t upscale_width = decoded.image.spec.width * 2U;
+    const std::uint32_t upscale_height = decoded.image.spec.height * 2U;
+    const auto upscaled = vektoryum::resample::resize(
+        upscale_source,
+        upscale_width,
+        upscale_height,
+        vektoryum::resample::ResampleOptions{vektoryum::resample::Filter::Lanczos3, true});
+    if (!upscaled.ok()) {
+        std::cerr << "error: upscale stage rejected decoded raster\n";
+        return static_cast<int>(vektoryum::api::ExitCode::Data);
+    }
+    std::vector<std::uint8_t> upscale_digest_bytes;
+    upscale_digest_bytes.reserve(upscaled.image.pixels.size());
+    for (const float value : upscaled.image.pixels) {
+        const double clamped = vektoryum::core::clamp_unit(static_cast<double>(value));
+        upscale_digest_bytes.push_back(static_cast<std::uint8_t>(clamped * 255.0 + 0.5));
+    }
+    const std::string upscale_sha256 = vektoryum::ml::sha256_hex(upscale_digest_bytes);
 
     std::vector<std::uint8_t> mask(static_cast<std::size_t>(pixel_count), 0U);
     for (std::size_t p = 0U; p < mask.size(); ++p) {
@@ -268,9 +312,14 @@ int run_certified_convert(
     }
 
     const std::string input_sha256 = vektoryum::ml::sha256_hex(loaded.input.bytes);
+    std::vector<std::uint8_t> chain_identity_bytes;
+    chain_identity_bytes.reserve(input_sha256.size() + upscale_sha256.size());
+    chain_identity_bytes.insert(chain_identity_bytes.end(), input_sha256.begin(), input_sha256.end());
+    chain_identity_bytes.insert(chain_identity_bytes.end(), upscale_sha256.begin(), upscale_sha256.end());
+    const std::string chain_sha256 = vektoryum::ml::sha256_hex(chain_identity_bytes);
     vektoryum::hybrid::HybridOutputManifest source{};
-    source.output_id = "r6-e2e-vector-output";
-    source.output_sha256 = input_sha256;
+    source.output_id = "r6-e2e-upscale-vector-output";
+    source.output_sha256 = chain_sha256;
     source.seam_error = fidelity.disagreement_ratio;
 
     const std::uint64_t estimated_output_bytes = std::max<std::uint64_t>(4096U, pixel_count * 4U);
@@ -372,6 +421,9 @@ int run_certified_convert(
               << "input_sha256=" << input_sha256 << '\n'
               << "analysis_kind=" << static_cast<unsigned>(analysis.kind) << '\n'
               << "analysis_route=" << static_cast<unsigned>(analysis.route) << '\n'
+              << "upscale_width=" << upscale_width << '\n'
+              << "upscale_height=" << upscale_height << '\n'
+              << "upscale_sha256=" << upscale_sha256 << '\n'
               << "vector_iou=" << fidelity.raster_iou << '\n'
               << "output_sha256=" << encoded.artifact.output_sha256 << '\n'
               << "certificate_sha256=" << issued.artifact.certificate_sha256 << '\n'
