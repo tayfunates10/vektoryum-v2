@@ -354,6 +354,7 @@ int run_certified_convert(
         reconstructed.scene,
         decoded.image.spec.width,
         decoded.image.spec.height);
+    const auto candidate_alpha = candidate_mask;
     std::transform(
         candidate_mask.begin(),
         candidate_mask.end(),
@@ -363,7 +364,7 @@ int run_certified_convert(
         });
     vektoryum::certification::CanonicalQualityFixture quality_fixture;
     quality_fixture.reference_alpha = alpha;
-    quality_fixture.candidate_alpha = alpha;
+    quality_fixture.candidate_alpha = candidate_alpha;
     quality_fixture.reference_vector_mask = certification_mask;
     quality_fixture.candidate_vector_mask = candidate_mask;
     const auto quality = vektoryum::certification::measure_canonical_quality_metrics(quality_fixture);
