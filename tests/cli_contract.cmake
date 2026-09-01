@@ -16,7 +16,7 @@ if(NOT EXISTS "${CLI}")
     message(FATAL_ERROR "CLI executable not found: ${CLI}")
 endif()
 
-set(expected_help "usage: vektoryum_cli [--version|--help|--probe-input FILE|--convert INPUT OUTPUT|--certified-export REQUEST_ID [CERTIFICATE_SHA256]]\n")
+set(expected_help "usage: vektoryum_cli [--version|--help|--probe-input FILE|--convert INPUT OUTPUT|--certified-export REQUEST_ID [CERTIFICATE_SHA256]|--certified-convert INPUT OUTPUT FORMAT]\n")
 execute_process(COMMAND "${CLI}" --help RESULT_VARIABLE help_rc OUTPUT_VARIABLE help_out ERROR_VARIABLE help_err)
 if(NOT help_rc EQUAL 0 OR NOT help_out STREQUAL expected_help OR NOT help_err STREQUAL "")
     message(FATAL_ERROR "--help contract mismatch: rc=${help_rc} stdout=[${help_out}] stderr=[${help_err}]")
