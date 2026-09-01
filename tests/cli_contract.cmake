@@ -94,3 +94,48 @@ set(expected_substituted "schema_version=vektoryum.core-api.v1\nrequest_id=reque
 if(NOT substituted_rc EQUAL 65 OR NOT substituted_out STREQUAL expected_substituted OR NOT substituted_err STREQUAL "")
     message(FATAL_ERROR "certificate substitution must fail closed with canonical Core API response bytes")
 endif()
+
+# R6 acceptance: drive one real raster through input -> analysis -> 2x upscale ->
+# vector reconstruction -> geometry-backed export -> measured quality certificate.
+# The same source is exercised across all four geometry export formats. A
+# successful CLI return necessarily passed the repository's existing fidelity,
+# structural-export, quality, provenance, and certificate issuance gates.
+find_program(PYTHON_EXECUTABLE NAMES python3 python REQUIRED)
+set(r6_dir "${CMAKE_CURRENT_BINARY_DIR}/r6-certified-convert-contract")
+file(REMOVE_RECURSE "${r6_dir}")
+file(MAKE_DIRECTORY "${r6_dir}")
+set(r6_input "${r6_dir}/binary-rectangle.png")
+set(r6_png_base64 "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAHUlEQVR42mP4TyFgGIYGMDAw4MWjBowMA0ZgXgAAbQ087j0hp+oAAAAASUVORK5CYII=")
+execute_process(
+    COMMAND "${PYTHON_EXECUTABLE}" -c "import base64,sys;open(sys.argv[1],'wb').write(base64.b64decode(sys.argv[2]))" "${r6_input}" "${r6_png_base64}"
+    RESULT_VARIABLE r6_fixture_rc
+    ERROR_VARIABLE r6_fixture_err)
+if(NOT r6_fixture_rc EQUAL 0 OR NOT EXISTS "${r6_input}")
+    message(FATAL_ERROR "R6 PNG fixture generation failed: rc=${r6_fixture_rc} stderr=[${r6_fixture_err}]")
+endif()
+
+foreach(r6_format IN ITEMS svg pdf eps dxf)
+    set(r6_output "${r6_dir}/certified.${r6_format}")
+    set(r6_certificate "${r6_output}.quality-certificate")
+    execute_process(
+        COMMAND "${CLI}" --certified-convert "${r6_input}" "${r6_output}" "${r6_format}"
+        RESULT_VARIABLE r6_rc
+        OUTPUT_VARIABLE r6_out
+        ERROR_VARIABLE r6_err)
+    if(NOT r6_rc EQUAL 0 OR NOT r6_err STREQUAL "")
+        message(FATAL_ERROR "R6 certified ${r6_format} chain failed: rc=${r6_rc} stdout=[${r6_out}] stderr=[${r6_err}]")
+    endif()
+    if(NOT r6_out MATCHES "^schema_version=vektoryum\\.r6-e2e\\.v1\nstatus=success\ninput_sha256=[0-9a-f]+\nanalysis_kind=[0-9]+\nanalysis_route=[0-9]+\nupscale_width=32\nupscale_height=32\nupscale_sha256=[0-9a-f]+\nvector_iou=[0-9.]+\noutput_sha256=[0-9a-f]+\ncertificate_sha256=[0-9a-f]+\ncertificate_path=.*\.quality-certificate\n$")
+        message(FATAL_ERROR "R6 certified ${r6_format} stdout evidence shape mismatch: [${r6_out}]")
+    endif()
+    if(NOT EXISTS "${r6_output}" OR NOT EXISTS "${r6_certificate}")
+        message(FATAL_ERROR "R6 certified ${r6_format} must materialize export and certificate artifacts")
+    endif()
+    file(SIZE "${r6_output}" r6_output_size)
+    file(SIZE "${r6_certificate}" r6_certificate_size)
+    if(r6_output_size EQUAL 0 OR r6_certificate_size EQUAL 0)
+        message(FATAL_ERROR "R6 certified ${r6_format} artifacts must be non-empty")
+    endif()
+endforeach()
+
+file(REMOVE_RECURSE "${r6_dir}")
