@@ -306,7 +306,9 @@ int run_certified_convert(
         mask.begin(),
         mask.end(),
         certification_mask.begin(),
-        [](std::uint8_t value) { return static_cast<std::uint8_t>(value != 0U); });
+        [](std::uint8_t value) {
+            return static_cast<std::uint8_t>(vektoryum::vector::coverage_is_foreground(value));
+        });
     const auto fidelity = vektoryum::vector::certify_svg_scene(
         fitted.scene,
         certification_mask,
@@ -352,14 +354,17 @@ int run_certified_convert(
         reconstructed.scene,
         decoded.image.spec.width,
         decoded.image.spec.height);
+    const auto candidate_alpha = candidate_mask;
     std::transform(
         candidate_mask.begin(),
         candidate_mask.end(),
         candidate_mask.begin(),
-        [](std::uint8_t value) { return static_cast<std::uint8_t>(value != 0U); });
+        [](std::uint8_t value) {
+            return static_cast<std::uint8_t>(vektoryum::vector::coverage_is_foreground(value));
+        });
     vektoryum::certification::CanonicalQualityFixture quality_fixture;
-    quality_fixture.reference_alpha = alpha;
-    quality_fixture.candidate_alpha = alpha;
+    quality_fixture.reference_alpha = has_transparency ? alpha : mask;
+    quality_fixture.candidate_alpha = candidate_alpha;
     quality_fixture.reference_vector_mask = certification_mask;
     quality_fixture.candidate_vector_mask = candidate_mask;
     const auto quality = vektoryum::certification::measure_canonical_quality_metrics(quality_fixture);

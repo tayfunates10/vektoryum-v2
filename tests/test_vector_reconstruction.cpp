@@ -41,6 +41,26 @@ int run_vector_reconstruction_tests() {
                     rect_quality.disagreement_ratio == 0.0 && rect_quality.self_intersections == 0U,
                 "rectangle passes vector fidelity certification");
 
+    std::vector<std::uint8_t> soft_alpha(5U * 5U, 0U);
+    soft_alpha[1U * 5U + 1U] = 127U;
+    soft_alpha[1U * 5U + 2U] = 128U;
+    soft_alpha[1U * 5U + 3U] = 127U;
+    soft_alpha[2U * 5U + 1U] = 127U;
+    soft_alpha[2U * 5U + 2U] = 255U;
+    soft_alpha[2U * 5U + 3U] = 128U;
+    soft_alpha[3U * 5U + 1U] = 127U;
+    soft_alpha[3U * 5U + 2U] = 128U;
+    soft_alpha[3U * 5U + 3U] = 127U;
+    std::vector<std::uint8_t> canonical_soft_alpha(soft_alpha.size(), 0U);
+    for (std::size_t i = 0U; i < soft_alpha.size(); ++i) {
+        canonical_soft_alpha[i] = coverage_is_foreground(soft_alpha[i]) ? 255U : 0U;
+    }
+    const auto soft_alpha_result = reconstruct_binary_mask(soft_alpha, 5U, 5U);
+    expect_true(soft_alpha_result.ok(), "soft-alpha coverage reconstructs with canonical threshold semantics");
+    const auto soft_alpha_raster = rasterize_even_odd(soft_alpha_result.scene, 5U, 5U);
+    expect_true(binary_iou(canonical_soft_alpha, soft_alpha_raster) == 1.0,
+                "soft-alpha rasterize-back matches the same canonical >=128 coverage definition");
+
     std::vector<std::uint8_t> donut(7U * 7U, 0U);
     for (std::uint32_t y = 1U; y < 6U; ++y) {
         for (std::uint32_t x = 1U; x < 6U; ++x) {
