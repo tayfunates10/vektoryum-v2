@@ -105,7 +105,7 @@ set(r6_dir "${CMAKE_CURRENT_BINARY_DIR}/r6-certified-convert-contract")
 file(REMOVE_RECURSE "${r6_dir}")
 file(MAKE_DIRECTORY "${r6_dir}")
 set(r6_input "${r6_dir}/binary-rectangle.png")
-set(r6_png_base64 "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAHUlEQVR42mP4TyFgGIYGMDAw4MWjBowMA0ZgXgAAbQ087j0hp+oAAAAASUVORK5CYII=")
+set(r6_png_base64 "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAH0lEQVR42mP4TyFgoJoBDAwMROFRA4a3AQOfEkewAQAHQw0eb4M0VwAAAABJRU5ErkJggg==")
 execute_process(
     COMMAND "${PYTHON_EXECUTABLE}" -c "import base64,sys;open(sys.argv[1],'wb').write(base64.b64decode(sys.argv[2]))" "${r6_input}" "${r6_png_base64}"
     RESULT_VARIABLE r6_fixture_rc
