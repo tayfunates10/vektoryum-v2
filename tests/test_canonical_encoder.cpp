@@ -205,6 +205,22 @@ int main() {
                     "fill-rule=\"evenodd\"",
                     "U3 SVG compound path lost even-odd hole semantics");
 
+                auto colored_scene = geometry_scene();
+                colored_scene.fill_rgb = {0x12U, 0x34U, 0xabU};
+                const auto colored = vektoryum::exporting::encode_geometry_export(
+                    request, source, colored_scene);
+                if (!colored.ok()) {
+                    fail("U4 colored SVG scene was rejected by geometry encoder");
+                }
+                const std::string colored_text = artifact_text(colored);
+                require_contains(
+                    colored_text,
+                    "fill=\"#1234ab\"",
+                    "U4 SVG exporter ignored scene source-paint metadata");
+                if (colored.artifact.output_sha256 == geometry.artifact.output_sha256) {
+                    fail("U4 SVG export digest did not change when source-paint metadata changed");
+                }
+
                 malformed = malformed_copy(geometry.artifact, "fill-rule=\"evenodd\"", "fill-rule=\"nonzero\"");
                 break;
             }
