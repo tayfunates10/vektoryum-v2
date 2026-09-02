@@ -2,7 +2,7 @@
 
 Contract/infrastructure roadmap completion: **100%**
 
-Functional end-user product readiness: **post-R6 real-user corrective program active; U1 implementation acceptance complete, README exact-head CI pending**.
+Functional end-user product readiness: **post-R6 real-user corrective program active; U1 complete, U2 implementation acceptance complete and README exact-head CI pending**.
 
 The Stage 0-13 contract roadmap and corrective R1-R6 implementation are complete, but a 2026-09-01 real-user audit proved that this still does **not** establish general-user raster-to-vector readiness. The measured audit exposed alpha/coverage semantic inconsistency, topology ambiguity on realistic contours, broken serialized SVG hole semantics, loss of source colors, certification that was not derived from the final serialized output, an upscale path that did not feed reconstruction, and cubic recovery that was not exercised by the real CLI path. These are tracked as a strict post-R6 U1-U8 corrective program. Existing quality thresholds, provenance, sanitizer behavior, API/CLI contracts and fail-closed acceptance gates remain immutable unless a later roadmap stage explicitly adds a stricter gate.
 
@@ -44,8 +44,8 @@ The post-roadmap visual audit exposed gaps that the contract-focused acceptance 
 
 | Corrective stage | Acceptance goal | Status |
 |---|---|---|
-| U1 | One canonical alpha/coverage semantic across reconstruction, rasterize-back, quality and certification; soft-alpha regression | implementation complete; README exact-head CI pending |
-| U2 | Deterministic saddle/diagonal topology resolution instead of rejecting realistic contour ambiguity | pending |
+| U1 | One canonical alpha/coverage semantic across reconstruction, rasterize-back, quality and certification; soft-alpha regression | complete |
+| U2 | Deterministic saddle/diagonal topology resolution instead of rejecting realistic contour ambiguity | implementation complete; README exact-head CI pending |
 | U3 | Compound-path hole hierarchy and serialized SVG hole semantics validated from emitted output | pending |
 | U4 | Preserve color regions/layers/fills and honor analyzer routing instead of forcing all inputs through binary vectorization | pending |
 | U5 | Derive final certification from independently rasterized serialized output with real alpha/color/component-hole/boundary/residual metrics | pending |
@@ -55,7 +55,7 @@ The post-roadmap visual audit exposed gaps that the contract-focused acceptance 
 
 ## Verified post-R6 milestones
 
-### U1 — implementation complete; README CI pending
+### U1 — complete
 
 - `canonical_coverage_threshold` is explicitly fixed at 128 and `coverage_is_foreground()` is the shared foreground definition.
 - Reconstruction defaults, certification-mask normalization and rasterize-back candidate-mask normalization now use the same canonical `coverage >= 128` semantic; the previous `>=128` versus `!=0` mismatch is removed without changing the threshold.
@@ -63,7 +63,17 @@ The post-roadmap visual audit exposed gaps that the contract-focused acceptance 
 - Candidate alpha is measured from rasterized reconstructed geometry instead of assigning the source alpha to both reference and candidate.
 - Regression coverage locks the 127/128 boundary and proves rasterize-back IoU is exact when the same canonical coverage definition is used.
 - Existing vector fidelity gates remain unchanged: `IoU >= 0.995` and disagreement ratio `<= 0.005`. Existing quality, provenance, sanitizer, API/CLI and fail-closed contracts are unchanged.
-- U1 implementation acceptance is green on exact HEAD `18baf1dc5976ce7d18c86c3bc06e7bc6f3da98be` with `core-ci #326`; PR #22 was `mergeable=true` with zero unresolved blocking review threads at verification time. This README status commit must receive fresh exact-head green CI before U1 can merge.
+- U1 merged only after its README status commit received fresh exact-head green CI with `mergeable=true` and zero unresolved blocking review threads.
+
+### U2 — implementation complete; README CI pending
+
+- Checkerboard/saddle contour junctions no longer fail solely because multiple outgoing edges share a grid vertex; reconstruction selects the next unused edge with a deterministic orientation-aware priority and stable coordinate tie-break.
+- Diagonal-only touching foreground components remain separate contours rather than being spuriously connected across a saddle junction.
+- Regression executes the same 2x2 diagonal fixture twice and requires identical contour count, ordering and points, proving deterministic topology resolution.
+- Rasterize-back of the diagonal fixture is required to match the canonical foreground exactly with IoU `1.0`, certification passed and disagreement ratio `0.0`.
+- A JPEG-like anti-aliased saddle fixture locks the canonical `coverage >= 128` interpretation and requires the same deterministic two-contour topology plus exact canonical rasterize-back fidelity.
+- Existing vector fidelity gates remain unchanged: `IoU >= 0.995` and disagreement ratio `<= 0.005`; provenance, sanitizer, API/CLI and fail-closed acceptance behavior are unchanged.
+- U2 implementation acceptance is green on exact HEAD `8121e2aeca17abaac9c100569e3c9bce4586285e` with `core-ci #334`; PR #23 was `mergeable=true` with zero unresolved blocking review threads at verification time. This README status commit must receive fresh exact-head green CI before U2 can merge.
 
 ## Verified corrective milestones R1-R6
 
@@ -124,9 +134,9 @@ These milestones remain valuable and are not being weakened. They are prerequisi
 
 ## Current corrective priority
 
-1. Obtain fresh exact-head green CI evidence for the U1 README status commit.
+1. Obtain fresh exact-head green CI evidence for the U2 README status commit.
 2. Re-verify `mergeable=true` and zero unresolved blocking review threads.
-3. Merge U1 only with expected-head protection after all U1 acceptance evidence remains green.
-4. Open U2 only after U1 is merged, then proceed sequentially through U8.
+3. Merge U2 only with expected-head protection after all U2 acceptance evidence remains green.
+4. Open U3 only after U2 is merged, then proceed sequentially through U8.
 
 UI, account and subscription work remains deferred until the post-R6 real-user corrective program reaches its required acceptance state.

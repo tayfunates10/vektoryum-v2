@@ -208,8 +208,33 @@ int run_vector_reconstruction_tests() {
                 "empty foreground fails closed");
 
     const std::vector<std::uint8_t> diagonal{255U, 0U, 0U, 255U};
-    expect_true(reconstruct_binary_mask(diagonal, 2U, 2U).error == ReconstructionError::TopologyAmbiguity,
-                "diagonal-only touching components fail closed as topology ambiguity");
+    const auto diagonal_a = reconstruct_binary_mask(diagonal, 2U, 2U);
+    const auto diagonal_b = reconstruct_binary_mask(diagonal, 2U, 2U);
+    expect_true(diagonal_a.ok() && diagonal_b.ok() && diagonal_a.scene.paths.size() == 2U &&
+                    diagonal_b.scene.paths.size() == diagonal_a.scene.paths.size() &&
+                    diagonal_b.scene.paths[0].points == diagonal_a.scene.paths[0].points &&
+                    diagonal_b.scene.paths[1].points == diagonal_a.scene.paths[1].points,
+                "diagonal-only touching components resolve into deterministic contours");
+    const auto diagonal_raster = rasterize_even_odd(diagonal_a.scene, 2U, 2U);
+    const auto diagonal_quality = certify_scene(diagonal_a.scene, diagonal, 2U, 2U);
+    expect_true(binary_iou(diagonal, diagonal_raster) == 1.0 && diagonal_quality.passed() &&
+                    diagonal_quality.raster_iou == 1.0 && diagonal_quality.disagreement_ratio == 0.0,
+                "diagonal saddle topology round-trips with exact fidelity");
+
+    const std::vector<std::uint8_t> jpeg_like_saddle{201U, 74U, 91U, 188U};
+    const std::vector<std::uint8_t> jpeg_like_reference{255U, 0U, 0U, 255U};
+    const auto jpeg_like_a = reconstruct_binary_mask(jpeg_like_saddle, 2U, 2U);
+    const auto jpeg_like_b = reconstruct_binary_mask(jpeg_like_saddle, 2U, 2U);
+    expect_true(jpeg_like_a.ok() && jpeg_like_b.ok() && jpeg_like_a.scene.paths.size() == 2U &&
+                    jpeg_like_b.scene.paths.size() == jpeg_like_a.scene.paths.size() &&
+                    jpeg_like_b.scene.paths[0].points == jpeg_like_a.scene.paths[0].points &&
+                    jpeg_like_b.scene.paths[1].points == jpeg_like_a.scene.paths[1].points,
+                "JPEG-like saddle coverage resolves deterministically at the canonical threshold");
+    const auto jpeg_like_raster = rasterize_even_odd(jpeg_like_a.scene, 2U, 2U);
+    const auto jpeg_like_quality = certify_scene(jpeg_like_a.scene, jpeg_like_reference, 2U, 2U);
+    expect_true(binary_iou(jpeg_like_reference, jpeg_like_raster) == 1.0 && jpeg_like_quality.passed() &&
+                    jpeg_like_quality.raster_iou == 1.0 && jpeg_like_quality.disagreement_ratio == 0.0,
+                "JPEG-like saddle topology round-trips with exact canonical fidelity");
 
     const std::span<const std::uint8_t> none{};
     expect_true(reconstruct_binary_mask(
