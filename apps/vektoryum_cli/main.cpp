@@ -241,10 +241,10 @@ int run_certified_convert(
     }
 
     const auto analysis = vektoryum::analysis::analyze_rgb_f32(
-        rgb,
+        upscale_source.pixels,
         decoded.image.spec.width,
         decoded.image.spec.height,
-        3U);
+        4U);
     if (!analysis.valid) {
         std::cerr << "error: content analysis rejected decoded raster\n";
         return static_cast<int>(vektoryum::api::ExitCode::Data);
