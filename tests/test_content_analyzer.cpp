@@ -76,6 +76,25 @@ int run_content_analyzer_tests() {
     expect_true(rgba_shape.route == ProcessingRoute::VectorReconstruction,
                 "RGBA alpha-only silhouette routes to vector reconstruction");
 
+    std::vector<float> hard_edge_logo(8U * 8U * 4U, 1.0F);
+    for (std::uint32_t y = 0U; y < 8U; ++y) {
+        for (std::uint32_t x = 0U; x < 8U; ++x) {
+            const std::size_t index = (static_cast<std::size_t>(y) * 8U + x) * 4U;
+            const float value = x < 4U ? 0.0F : 1.0F;
+            hard_edge_logo[index] = value;
+            hard_edge_logo[index + 1U] = value;
+            hard_edge_logo[index + 2U] = value;
+            hard_edge_logo[index + 3U] = 1.0F;
+        }
+    }
+    const auto hard_edge = analyze_rgb_f32(hard_edge_logo, 8U, 8U, 4U);
+    expect_true(hard_edge.valid && hard_edge.features.edge_density > 0.0,
+                "hard-edged logo exposes structural edge density");
+    expect_true(hard_edge.features.texture_energy == 0.0,
+                "hard structural edges are excluded from texture energy");
+    expect_true(hard_edge.route == ProcessingRoute::VectorReconstruction,
+                "hard-edged logo remains on vector reconstruction route");
+
     const auto bad_shape = analyze_rgb_f32(flat_rgb, 4U, 4U, 4U);
     expect_true(!bad_shape.valid, "mismatched buffer shape is rejected");
 
