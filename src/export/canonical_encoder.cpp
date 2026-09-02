@@ -87,10 +87,16 @@ namespace {
     out << "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"" << request.width
         << "\" height=\"" << request.height << "\" viewBox=\"0 0 " << request.width << ' '
         << request.height << "\">\n";
+    out << "  <path d=\"";
+    bool first_subpath = true;
     for (const auto& path : scene.paths) {
-        out << "  <path d=\"" << vector::serialize_svg_path_data(path)
-            << "\" fill=\"#000000\" fill-rule=\"evenodd\"/>\n";
+        if (!first_subpath) {
+            out << ' ';
+        }
+        out << vector::serialize_svg_path_data(path);
+        first_subpath = false;
     }
+    out << "\" fill=\"#000000\" fill-rule=\"evenodd\"/>\n";
     out << "</svg>\n";
     return out.str();
 }

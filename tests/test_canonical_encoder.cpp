@@ -79,6 +79,37 @@ SvgScene geometry_scene(double end_x = 100.0) {
     return scene;
 }
 
+SvgPath rectangle_path(double left, double top, double right, double bottom) {
+    SvgPath path;
+    SvgCommand move;
+    move.type = SvgCommandType::MoveTo;
+    move.end = {left, top};
+    path.commands.push_back(move);
+
+    for (const DoublePoint point : std::array<DoublePoint, 3U>{
+             DoublePoint{right, top}, DoublePoint{right, bottom}, DoublePoint{left, bottom}}) {
+        SvgCommand line;
+        line.type = SvgCommandType::LineTo;
+        line.end = point;
+        path.commands.push_back(line);
+    }
+
+    SvgCommand close;
+    close.type = SvgCommandType::Close;
+    path.commands.push_back(close);
+    return path;
+}
+
+SvgScene compound_hole_scene() {
+    SvgScene scene;
+    scene.width = 640U;
+    scene.height = 480U;
+    scene.paths.push_back(rectangle_path(10.0, 10.0, 200.0, 200.0));
+    scene.paths.push_back(rectangle_path(60.0, 60.0, 150.0, 150.0));
+    scene.paths.push_back(rectangle_path(90.0, 90.0, 120.0, 120.0));
+    return scene;
+}
+
 std::string artifact_text(const vektoryum::exporting::CanonicalEncodeResult& result) {
     return {result.artifact.bytes.begin(), result.artifact.bytes.end()};
 }
@@ -145,12 +176,38 @@ int main() {
         const std::string text = artifact_text(geometry);
         vektoryum::exporting::EncodedExportArtifact malformed;
         switch (format) {
-            case ExportFormat::Svg:
+            case ExportFormat::Svg: {
                 require_contains(text, "<path d=\"M 10.000000 10.000000", "SVG contains no reconstructed path geometry");
                 require_contains(text, " C ", "SVG lost cubic Bezier geometry");
                 require_contains(text, "fill-rule=\"evenodd\"", "SVG lost topology fill rule");
+
+                const auto compound = vektoryum::exporting::encode_geometry_export(
+                    request, source, compound_hole_scene());
+                if (!compound.ok()) {
+                    fail("U3 compound hole scene was rejected by SVG encoder");
+                }
+                const std::string compound_text = artifact_text(compound);
+                const std::size_t first_path = compound_text.find("<path d=\"");
+                if (first_path == std::string::npos ||
+                    compound_text.find("<path d=\"", first_path + 1U) != std::string::npos) {
+                    fail("U3 SVG serialized compound contours as separate path elements");
+                }
+                require_contains(
+                    compound_text,
+                    "Z M 60.000000 60.000000",
+                    "U3 SVG compound path did not preserve the nested hole subpath");
+                require_contains(
+                    compound_text,
+                    "Z M 90.000000 90.000000",
+                    "U3 SVG compound path did not preserve the nested island subpath");
+                require_contains(
+                    compound_text,
+                    "fill-rule=\"evenodd\"",
+                    "U3 SVG compound path lost even-odd hole semantics");
+
                 malformed = malformed_copy(geometry.artifact, "fill-rule=\"evenodd\"", "fill-rule=\"nonzero\"");
                 break;
+            }
             case ExportFormat::Pdf:
                 require_contains(text, "xref\n", "PDF has no xref table");
                 require_contains(text, "trailer\n", "PDF has no trailer dictionary");
