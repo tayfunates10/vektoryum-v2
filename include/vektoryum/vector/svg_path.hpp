@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <cstdint>
 #include <span>
 #include <string>
@@ -39,6 +40,10 @@ struct SvgScene {
     std::uint32_t width{};
     std::uint32_t height{};
     std::vector<SvgPath> paths{};
+    // U4 paint metadata is carried with geometry instead of being invented by
+    // exporters. Black remains the compatibility default until the caller
+    // supplies source-derived paint.
+    std::array<std::uint8_t, 3U> fill_rgb{0U, 0U, 0U};
 };
 
 enum class SvgFitError : std::uint8_t {
