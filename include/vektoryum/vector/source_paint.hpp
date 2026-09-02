@@ -6,6 +6,7 @@
 #include <span>
 
 #include "vektoryum/vector/reconstruction.hpp"
+#include "vektoryum/vector/svg_path.hpp"
 
 namespace vektoryum::vector {
 
@@ -57,6 +58,29 @@ struct SourceFillRgbResult {
     };
     result.valid = true;
     return result;
+}
+
+// Attaches deterministic source paint metadata without changing certified
+// geometry. The compatibility fill is always populated; a scene that does not
+// yet have explicit paint layers receives one compound layer containing the
+// already-fitted paths. Existing multi-layer paint is never collapsed.
+[[nodiscard]] inline bool attach_source_fill_rgb(
+    SvgScene& scene,
+    std::span<const std::uint8_t> rgba8,
+    std::span<const std::uint8_t> coverage) {
+    const auto source_fill = derive_source_fill_rgb(rgba8, coverage);
+    if (!source_fill.valid) {
+        return false;
+    }
+
+    scene.fill_rgb = source_fill.rgb;
+    if (scene.paint_layers.empty() && !scene.paths.empty()) {
+        SvgPaintLayer layer{};
+        layer.paths = scene.paths;
+        layer.fill_rgb = source_fill.rgb;
+        scene.paint_layers.push_back(std::move(layer));
+    }
+    return true;
 }
 
 }  // namespace vektoryum::vector
