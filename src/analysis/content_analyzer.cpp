@@ -146,7 +146,9 @@ ContentAnalysis analyze_rgb_f32(
                 ++comparisons;
                 edges += delta >= 0.12 ? 1U : 0U;
                 flats += delta <= 0.025 ? 1U : 0U;
-                texture_sum += delta * delta;
+                if (delta < 0.12) {
+                    texture_sum += delta * delta;
+                }
                 if (channels == 4U && std::abs(static_cast<double>(p[3] - left[3])) >= 0.10) {
                     ++alpha_transitions;
                 }
@@ -158,7 +160,9 @@ ContentAnalysis analyze_rgb_f32(
                 ++comparisons;
                 edges += delta >= 0.12 ? 1U : 0U;
                 flats += delta <= 0.025 ? 1U : 0U;
-                texture_sum += delta * delta;
+                if (delta < 0.12) {
+                    texture_sum += delta * delta;
+                }
                 if (channels == 4U && std::abs(static_cast<double>(p[3] - up[3])) >= 0.10) {
                     ++alpha_transitions;
                 }
