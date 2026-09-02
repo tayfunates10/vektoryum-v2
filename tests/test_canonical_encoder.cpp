@@ -106,6 +106,7 @@ SvgScene compound_hole_scene() {
     scene.height = 480U;
     scene.paths.push_back(rectangle_path(10.0, 10.0, 200.0, 200.0));
     scene.paths.push_back(rectangle_path(60.0, 60.0, 150.0, 150.0));
+    scene.paths.push_back(rectangle_path(90.0, 90.0, 120.0, 120.0));
     return scene;
 }
 
@@ -195,6 +196,10 @@ int main() {
                     compound_text,
                     "Z M 60.000000 60.000000",
                     "U3 SVG compound path did not preserve the nested hole subpath");
+                require_contains(
+                    compound_text,
+                    "Z M 90.000000 90.000000",
+                    "U3 SVG compound path did not preserve the nested island subpath");
                 require_contains(
                     compound_text,
                     "fill-rule=\"evenodd\"",
