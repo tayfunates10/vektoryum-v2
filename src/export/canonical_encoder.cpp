@@ -18,6 +18,15 @@ namespace {
     return stream.str();
 }
 
+[[nodiscard]] std::string rgb_hex(const std::array<std::uint8_t, 3U>& rgb) {
+    std::ostringstream stream;
+    stream << '#' << std::hex << std::setfill('0') << std::nouppercase;
+    for (const std::uint8_t channel : rgb) {
+        stream << std::setw(2) << static_cast<unsigned int>(channel);
+    }
+    return stream.str();
+}
+
 [[nodiscard]] std::string encode_bytes(const ExportRequest& request) {
     const std::string width = std::to_string(request.width);
     const std::string height = std::to_string(request.height);
@@ -96,7 +105,7 @@ namespace {
         out << vector::serialize_svg_path_data(path);
         first_subpath = false;
     }
-    out << "\" fill=\"#000000\" fill-rule=\"evenodd\"/>\n";
+    out << "\" fill=\"" << rgb_hex(scene.fill_rgb) << "\" fill-rule=\"evenodd\"/>\n";
     out << "</svg>\n";
     return out.str();
 }
