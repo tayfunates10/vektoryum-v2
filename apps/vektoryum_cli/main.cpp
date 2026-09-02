@@ -249,6 +249,10 @@ int run_certified_convert(
         std::cerr << "error: content analysis rejected decoded raster\n";
         return static_cast<int>(vektoryum::api::ExitCode::Data);
     }
+    if (analysis.route != vektoryum::analysis::ProcessingRoute::VectorReconstruction) {
+        std::cerr << "error: content analysis selected non-vector route\n";
+        return static_cast<int>(vektoryum::api::ExitCode::Data);
+    }
 
     if (decoded.image.spec.width > std::numeric_limits<std::uint32_t>::max() / 2U ||
         decoded.image.spec.height > std::numeric_limits<std::uint32_t>::max() / 2U) {
