@@ -1,4 +1,5 @@
 #include "vektoryum/certification/quality_certificate.hpp"
+#include "vektoryum/certification/final_output_evidence.hpp"
 
 #include <cstdlib>
 #include <iostream>
@@ -6,6 +7,7 @@
 #include <vector>
 
 #include "vektoryum/export/canonical_encoder.hpp"
+#include "vektoryum/ml/artifact_digest.hpp"
 
 namespace {
 
@@ -205,6 +207,81 @@ using vektoryum::hybrid::HybridOutputManifest;
     return true;
 }
 
+[[nodiscard]] bool verify_final_serialized_svg_evidence() {
+    const std::string svg =
+        "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"4\" height=\"4\" viewBox=\"0 0 4 4\">"
+        "<path d=\"M1 1 L3 1 L3 3 L1 3 Z\" fill=\"#ff0000\" fill-rule=\"evenodd\"/>"
+        "</svg>";
+    const std::vector<std::uint8_t> svg_bytes(svg.begin(), svg.end());
+
+    std::vector<std::uint8_t> reference_rgba(4U * 4U * 4U, 0U);
+    std::vector<std::uint8_t> reference_alpha(16U, 0U);
+    std::vector<std::uint8_t> reference_mask(16U, 0U);
+    for (std::size_t y = 1U; y < 3U; ++y) {
+        for (std::size_t x = 1U; x < 3U; ++x) {
+            const std::size_t pixel = y * 4U + x;
+            const std::size_t base = pixel * 4U;
+            reference_rgba[base] = 255U;
+            reference_rgba[base + 3U] = 255U;
+            reference_alpha[pixel] = 255U;
+            reference_mask[pixel] = 1U;
+        }
+    }
+
+    const auto evidence = vektoryum::certification::measure_final_serialized_svg_evidence(
+        svg_bytes,
+        reference_rgba,
+        reference_alpha,
+        reference_mask,
+        4U,
+        4U);
+    if (!evidence.valid || !evidence.canonical_quality.ok() ||
+        evidence.output_sha256 != vektoryum::ml::sha256_hex(svg_bytes) ||
+        evidence.color_mae != 0.0 ||
+        evidence.reference_components != 1U || evidence.candidate_components != 1U ||
+        evidence.reference_holes != 0U || evidence.candidate_holes != 0U ||
+        evidence.boundary_p95_pixels != 0.0 ||
+        evidence.visible_residual_ratio != 0.0) {
+        std::cerr << "final serialized SVG evidence did not reproduce exact artifact bytes\n";
+        return false;
+    }
+
+    const std::string recolored_svg =
+        "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"4\" height=\"4\" viewBox=\"0 0 4 4\">"
+        "<path d=\"M1 1 L3 1 L3 3 L1 3 Z\" fill=\"#0000ff\" fill-rule=\"evenodd\"/>"
+        "</svg>";
+    const std::vector<std::uint8_t> recolored_bytes(recolored_svg.begin(), recolored_svg.end());
+    const auto recolored = vektoryum::certification::measure_final_serialized_svg_evidence(
+        recolored_bytes,
+        reference_rgba,
+        reference_alpha,
+        reference_mask,
+        4U,
+        4U);
+    if (!recolored.valid || !recolored.canonical_quality.ok() ||
+        recolored.output_sha256 == evidence.output_sha256 ||
+        recolored.color_mae <= 0.0 ||
+        recolored.visible_residual_ratio <= 0.0) {
+        std::cerr << "final serialized SVG color tamper was not reflected in artifact-bound evidence\n";
+        return false;
+    }
+
+    auto malformed = svg_bytes;
+    malformed.pop_back();
+    if (vektoryum::certification::measure_final_serialized_svg_evidence(
+            malformed,
+            reference_rgba,
+            reference_alpha,
+            reference_mask,
+            4U,
+            4U).valid) {
+        std::cerr << "malformed final serialized SVG produced valid certification evidence\n";
+        return false;
+    }
+
+    return true;
+}
+
 }  // namespace
 
 int main() {
@@ -221,6 +298,9 @@ int main() {
         return EXIT_FAILURE;
     }
     if (!verify_exact_threshold_repeatability()) {
+        return EXIT_FAILURE;
+    }
+    if (!verify_final_serialized_svg_evidence()) {
         return EXIT_FAILURE;
     }
     return EXIT_SUCCESS;
