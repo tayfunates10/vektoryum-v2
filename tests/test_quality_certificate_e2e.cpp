@@ -209,9 +209,9 @@ using vektoryum::hybrid::HybridOutputManifest;
 
 [[nodiscard]] bool verify_final_serialized_svg_evidence() {
     const std::string svg =
-        "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"4\" height=\"4\" viewBox=\"0 0 4 4\">"
-        "<path d=\"M1 1 L3 1 L3 3 L1 3 Z\" fill=\"#ff0000\" fill-rule=\"evenodd\"/>"
-        "</svg>";
+        "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"4\" height=\"4\" viewBox=\"0 0 4 4\">\n"
+        "<path d=\"M1 1 L3 1 L3 3 L1 3 Z\" fill=\"#ff0000\" fill-rule=\"evenodd\"/>\n"
+        "</svg>\n";
     const std::vector<std::uint8_t> svg_bytes(svg.begin(), svg.end());
 
     std::vector<std::uint8_t> reference_rgba(4U * 4U * 4U, 0U);
@@ -247,9 +247,9 @@ using vektoryum::hybrid::HybridOutputManifest;
     }
 
     const std::string recolored_svg =
-        "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"4\" height=\"4\" viewBox=\"0 0 4 4\">"
-        "<path d=\"M1 1 L3 1 L3 3 L1 3 Z\" fill=\"#0000ff\" fill-rule=\"evenodd\"/>"
-        "</svg>";
+        "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"4\" height=\"4\" viewBox=\"0 0 4 4\">\n"
+        "<path d=\"M1 1 L3 1 L3 3 L1 3 Z\" fill=\"#0000ff\" fill-rule=\"evenodd\"/>\n"
+        "</svg>\n";
     const std::vector<std::uint8_t> recolored_bytes(recolored_svg.begin(), recolored_svg.end());
     const auto recolored = vektoryum::certification::measure_final_serialized_svg_evidence(
         recolored_bytes,
