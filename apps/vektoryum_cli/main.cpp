@@ -9,6 +9,7 @@
 
 #include "vektoryum/analysis/content_analyzer.hpp"
 #include "vektoryum/api/stable_api.hpp"
+#include "vektoryum/certification/final_output_evidence.hpp"
 #include "vektoryum/certification/quality_certificate.hpp"
 #include "vektoryum/core/color.hpp"
 #include "vektoryum/export/canonical_encoder.hpp"
@@ -360,24 +361,43 @@ int run_certified_convert(
         return static_cast<int>(vektoryum::api::ExitCode::Data);
     }
 
-    auto candidate_mask = vektoryum::vector::rasterize_even_odd(
-        reconstructed.scene,
-        decoded.image.spec.width,
-        decoded.image.spec.height);
-    const auto candidate_alpha = candidate_mask;
-    std::transform(
-        candidate_mask.begin(),
-        candidate_mask.end(),
-        candidate_mask.begin(),
-        [](std::uint8_t value) {
-            return static_cast<std::uint8_t>(vektoryum::vector::coverage_is_foreground(value));
-        });
-    vektoryum::certification::CanonicalQualityFixture quality_fixture;
-    quality_fixture.reference_alpha = has_transparency ? alpha : mask;
-    quality_fixture.candidate_alpha = candidate_alpha;
-    quality_fixture.reference_vector_mask = certification_mask;
-    quality_fixture.candidate_vector_mask = candidate_mask;
-    const auto quality = vektoryum::certification::measure_canonical_quality_metrics(quality_fixture);
+    vektoryum::certification::CanonicalQualityMeasurement quality;
+    vektoryum::certification::FinalOutputEvidence final_evidence;
+    if (format == vektoryum::exporting::ExportFormat::Svg) {
+        final_evidence = vektoryum::certification::measure_final_serialized_svg_evidence(
+            encoded.artifact.bytes,
+            decoded.image.rgba8,
+            has_transparency ? std::span<const std::uint8_t>(alpha) : std::span<const std::uint8_t>(mask),
+            certification_mask,
+            decoded.image.spec.width,
+            decoded.image.spec.height);
+        if (!final_evidence.valid || final_evidence.output_sha256 != encoded.artifact.output_sha256 ||
+            !final_evidence.canonical_quality.ok()) {
+            std::cerr << "error: final serialized output evidence failed acceptance gates\n";
+            return static_cast<int>(vektoryum::api::ExitCode::Data);
+        }
+        quality = final_evidence.canonical_quality;
+    } else {
+        auto candidate_mask = vektoryum::vector::rasterize_even_odd(
+            reconstructed.scene,
+            decoded.image.spec.width,
+            decoded.image.spec.height);
+        const auto candidate_alpha = candidate_mask;
+        std::transform(
+            candidate_mask.begin(),
+            candidate_mask.end(),
+            candidate_mask.begin(),
+            [](std::uint8_t value) {
+                return static_cast<std::uint8_t>(vektoryum::vector::coverage_is_foreground(value));
+            });
+        vektoryum::certification::CanonicalQualityFixture quality_fixture;
+        quality_fixture.reference_alpha = has_transparency ? alpha : mask;
+        quality_fixture.candidate_alpha = candidate_alpha;
+        quality_fixture.reference_vector_mask = certification_mask;
+        quality_fixture.candidate_vector_mask = candidate_mask;
+        quality = vektoryum::certification::measure_canonical_quality_metrics(quality_fixture);
+    }
+
     const auto performance = vektoryum::certification::measure_canonical_export_metrics(
         export_request,
         source,
@@ -395,14 +415,45 @@ int run_certified_convert(
     certificate_request.toolchain_revision = vektoryum::version_string();
     certificate_request.sample_count = performance.sample_count + quality.sample_count;
     certificate_request.execution_units = performance.execution_units;
-    certificate_request.metrics = {
-        quality.metrics[0],
-        performance.metrics[0],
-        performance.metrics[1],
-        performance.metrics[2],
-        quality.metrics[1],
-        performance.metrics[3],
-    };
+    if (format == vektoryum::exporting::ExportFormat::Svg) {
+        const double topology_limit = static_cast<double>(pixel_count);
+        const double boundary_limit = static_cast<double>(
+            std::max(decoded.image.spec.width, decoded.image.spec.height));
+        const double component_delta = static_cast<double>(
+            final_evidence.reference_components > final_evidence.candidate_components
+                ? final_evidence.reference_components - final_evidence.candidate_components
+                : final_evidence.candidate_components - final_evidence.reference_components);
+        const double hole_delta = static_cast<double>(
+            final_evidence.reference_holes > final_evidence.candidate_holes
+                ? final_evidence.reference_holes - final_evidence.candidate_holes
+                : final_evidence.candidate_holes - final_evidence.reference_holes);
+        certificate_request.metrics = {
+            quality.metrics[0],
+            vektoryum::certification::MetricGate{"boundary_p95_pixels", final_evidence.boundary_p95_pixels, 0.0, boundary_limit},
+            vektoryum::certification::MetricGate{"color_mae", final_evidence.color_mae, 0.0, 1.0},
+            vektoryum::certification::MetricGate{"component_count_delta", component_delta, 0.0, topology_limit},
+            performance.metrics[0],
+            vektoryum::certification::MetricGate{"hole_count_delta", hole_delta, 0.0, topology_limit},
+            performance.metrics[1],
+            performance.metrics[2],
+            quality.metrics[1],
+            vektoryum::certification::MetricGate{"visible_residual_ratio", final_evidence.visible_residual_ratio, 0.0, 1.0},
+            performance.metrics[3],
+        };
+        std::sort(
+            certificate_request.metrics.begin(),
+            certificate_request.metrics.end(),
+            [](const auto& lhs, const auto& rhs) { return lhs.name < rhs.name; });
+    } else {
+        certificate_request.metrics = {
+            quality.metrics[0],
+            performance.metrics[0],
+            performance.metrics[1],
+            performance.metrics[2],
+            quality.metrics[1],
+            performance.metrics[3],
+        };
+    }
     const auto issued = vektoryum::certification::issue_quality_certificate(
         certificate_request,
         export_request,
