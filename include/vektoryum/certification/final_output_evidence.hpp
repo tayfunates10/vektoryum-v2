@@ -208,7 +208,8 @@ struct BinaryTopology {
         return result;
     }
 
-    result.output_sha256 = vektoryum::ml::sha256_hex(final_svg_bytes);
+    const std::vector<std::uint8_t> serialized_bytes(final_svg_bytes.begin(), final_svg_bytes.end());
+    result.output_sha256 = vektoryum::ml::sha256_hex(serialized_bytes);
     result.color_mae = color_samples == 0U
         ? 0.0
         : static_cast<double>(color_error) / (255.0 * static_cast<double>(color_samples));
