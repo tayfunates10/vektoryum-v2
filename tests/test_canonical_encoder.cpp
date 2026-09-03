@@ -4,8 +4,10 @@
 #include <cstdlib>
 #include <iostream>
 #include <string>
+#include <vector>
 
 #include "vektoryum/ml/artifact_digest.hpp"
+#include "vektoryum/vector/source_paint.hpp"
 
 namespace {
 
@@ -16,6 +18,7 @@ using vektoryum::hybrid::HybridOutputManifest;
 using vektoryum::vector::DoublePoint;
 using vektoryum::vector::SvgCommand;
 using vektoryum::vector::SvgCommandType;
+using vektoryum::vector::SvgPaintLayer;
 using vektoryum::vector::SvgPath;
 using vektoryum::vector::SvgScene;
 
@@ -221,6 +224,30 @@ int main() {
                     fail("U4 SVG export digest did not change when source-paint metadata changed");
                 }
 
+                auto layered_scene = geometry_scene();
+                layered_scene.paint_layers.clear();
+                SvgPaintLayer red_layer;
+                red_layer.paths.push_back(rectangle_path(10.0, 10.0, 80.0, 80.0));
+                red_layer.fill_rgb = {0xffU, 0x00U, 0x00U};
+                SvgPaintLayer blue_layer;
+                blue_layer.paths.push_back(rectangle_path(90.0, 10.0, 160.0, 80.0));
+                blue_layer.fill_rgb = {0x00U, 0x00U, 0xffU};
+                layered_scene.paint_layers.push_back(red_layer);
+                layered_scene.paint_layers.push_back(blue_layer);
+                const auto layered = vektoryum::exporting::encode_geometry_export(
+                    request, source, layered_scene);
+                if (!layered.ok()) {
+                    fail("U4 multi-layer SVG scene was rejected by geometry encoder");
+                }
+                const std::string layered_text = artifact_text(layered);
+                require_contains(layered_text, "fill=\"#ff0000\"", "U4 first paint layer fill was lost");
+                require_contains(layered_text, "fill=\"#0000ff\"", "U4 second paint layer fill was lost");
+                const std::size_t layered_first_path = layered_text.find("<path d=\"");
+                if (layered_first_path == std::string::npos ||
+                    layered_text.find("<path d=\"", layered_first_path + 1U) == std::string::npos) {
+                    fail("U4 multi-layer SVG scene did not serialize distinct paint regions");
+                }
+
                 malformed = malformed_copy(geometry.artifact, "fill-rule=\"evenodd\"", "fill-rule=\"nonzero\"");
                 break;
             }
@@ -248,6 +275,37 @@ int main() {
         if (malformed_validation.error != ExportArtifactError::InvalidStructure) {
             fail("R5 format-aware validator accepted a malformed geometry artifact");
         }
+    }
+
+    SvgScene source_paint_scene;
+    source_paint_scene.width = 8U;
+    source_paint_scene.height = 8U;
+    source_paint_scene.paths.push_back(rectangle_path(0.0, 0.0, 8.0, 8.0));
+    std::vector<std::uint8_t> source_rgba(8U * 8U * 4U, 0U);
+    std::vector<std::uint8_t> source_coverage(8U * 8U, 255U);
+    for (std::uint32_t y = 0U; y < 8U; ++y) {
+        for (std::uint32_t x = 0U; x < 8U; ++x) {
+            const std::size_t base = (static_cast<std::size_t>(y) * 8U + x) * 4U;
+            source_rgba[base] = x < 4U ? 255U : 0U;
+            source_rgba[base + 1U] = 0U;
+            source_rgba[base + 2U] = x < 4U ? 0U : 255U;
+            source_rgba[base + 3U] = 255U;
+        }
+    }
+    if (!vektoryum::vector::attach_source_fill_rgb(source_paint_scene, source_rgba, source_coverage)) {
+        fail("U4 source-paint reconstruction rejected a two-color source fixture");
+    }
+    if (source_paint_scene.paint_layers.size() != 2U) {
+        fail("U4 source-paint reconstruction did not preserve two source color regions");
+    }
+    bool saw_red = false;
+    bool saw_blue = false;
+    for (const auto& layer : source_paint_scene.paint_layers) {
+        saw_red = saw_red || layer.fill_rgb == std::array<std::uint8_t, 3U>{255U, 0U, 0U};
+        saw_blue = saw_blue || layer.fill_rgb == std::array<std::uint8_t, 3U>{0U, 0U, 255U};
+    }
+    if (!saw_red || !saw_blue) {
+        fail("U4 source-paint reconstruction changed source region fills");
     }
 
     ExportRequest invalid = request_for(ExportFormat::Svg);
