@@ -246,6 +246,44 @@ using vektoryum::hybrid::HybridOutputManifest;
         return false;
     }
 
+    const std::string donut_svg =
+        "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"6\" height=\"6\" viewBox=\"0 0 6 6\">\n"
+        "<path d=\"M1 1 L5 1 L5 5 L1 5 Z M2 2 L2 4 L4 4 L4 2 Z\" fill=\"#ff0000\" fill-rule=\"evenodd\"/>\n"
+        "</svg>\n";
+    const std::vector<std::uint8_t> donut_bytes(donut_svg.begin(), donut_svg.end());
+    std::vector<std::uint8_t> donut_rgba(6U * 6U * 4U, 0U);
+    std::vector<std::uint8_t> donut_alpha(36U, 0U);
+    std::vector<std::uint8_t> donut_mask(36U, 0U);
+    for (std::size_t y = 1U; y < 5U; ++y) {
+        for (std::size_t x = 1U; x < 5U; ++x) {
+            if (x >= 2U && x < 4U && y >= 2U && y < 4U) {
+                continue;
+            }
+            const std::size_t pixel = y * 6U + x;
+            const std::size_t base = pixel * 4U;
+            donut_rgba[base] = 255U;
+            donut_rgba[base + 3U] = 255U;
+            donut_alpha[pixel] = 255U;
+            donut_mask[pixel] = 1U;
+        }
+    }
+    const auto donut = vektoryum::certification::measure_final_serialized_svg_evidence(
+        donut_bytes,
+        donut_rgba,
+        donut_alpha,
+        donut_mask,
+        6U,
+        6U);
+    if (!donut.valid || !donut.canonical_quality.ok() ||
+        donut.output_sha256 != vektoryum::ml::sha256_hex(donut_bytes) ||
+        donut.reference_components != 1U || donut.candidate_components != 1U ||
+        donut.reference_holes != 1U || donut.candidate_holes != 1U ||
+        donut.boundary_p95_pixels != 0.0 || donut.color_mae != 0.0 ||
+        donut.visible_residual_ratio != 0.0) {
+        std::cerr << "final serialized SVG hole topology was not certified from artifact bytes\n";
+        return false;
+    }
+
     const std::string recolored_svg =
         "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"4\" height=\"4\" viewBox=\"0 0 4 4\">\n"
         "<path d=\"M1 1 L3 1 L3 3 L1 3 Z\" fill=\"#0000ff\" fill-rule=\"evenodd\"/>\n"
