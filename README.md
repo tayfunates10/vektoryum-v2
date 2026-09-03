@@ -2,7 +2,7 @@
 
 Contract/infrastructure roadmap completion: **100%**
 
-Functional end-user product readiness: **post-R6 real-user corrective program active; U1-U3 complete, U4 implementation acceptance complete and README exact-head CI pending**.
+Functional end-user product readiness: **post-R6 real-user corrective program active; U1-U4 complete, U5 implementation acceptance complete and README exact-head CI pending**.
 
 The Stage 0-13 contract roadmap and corrective R1-R6 implementation are complete, but a 2026-09-01 real-user audit proved that this still does **not** establish general-user raster-to-vector readiness. The measured audit exposed alpha/coverage semantic inconsistency, topology ambiguity on realistic contours, broken serialized SVG hole semantics, loss of source colors, certification that was not derived from the final serialized output, an upscale path that did not feed reconstruction, and cubic recovery that was not exercised by the real CLI path. These are tracked as a strict post-R6 U1-U8 corrective program. Existing quality thresholds, provenance, sanitizer behavior, API/CLI contracts and fail-closed acceptance gates remain immutable unless a later roadmap stage explicitly adds a stricter gate.
 
@@ -47,8 +47,8 @@ The post-roadmap visual audit exposed gaps that the contract-focused acceptance 
 | U1 | One canonical alpha/coverage semantic across reconstruction, rasterize-back, quality and certification; soft-alpha regression | complete |
 | U2 | Deterministic saddle/diagonal topology resolution instead of rejecting realistic contour ambiguity | complete |
 | U3 | Compound-path hole hierarchy and serialized SVG hole semantics validated from emitted output | complete |
-| U4 | Preserve color regions/layers/fills and honor analyzer routing instead of forcing all inputs through binary vectorization | implementation complete; README exact-head CI pending |
-| U5 | Derive final certification from independently rasterized serialized output with real alpha/color/component-hole/boundary/residual metrics | pending |
+| U4 | Preserve color regions/layers/fills and honor analyzer routing instead of forcing all inputs through binary vectorization | complete |
+| U5 | Derive final certification from independently rasterized serialized output with real alpha/color/component-hole/boundary/residual metrics | implementation complete; README exact-head CI pending |
 | U6 | Feed the actual upscale result into reconstruction or fail the claimed upscale chain | pending |
 | U7 | Enable fidelity-gated cubic fitting on the real CLI production path | pending |
 | U8 | Lock the eight real-user fixtures and production component/residual/boundary gates without weakening existing vector gates | pending |
@@ -83,14 +83,22 @@ The post-roadmap visual audit exposed gaps that the contract-focused acceptance 
 - Existing vector fidelity gates remain unchanged: `IoU >= 0.995` and disagreement ratio `<= 0.005`; provenance, sanitizer, API/CLI and fail-closed acceptance behavior are unchanged.
 - U3 merged with expected-head protection after its README status commit received fresh exact-head green CI; merge commit `56c03a32f479da9260f3b5791e2bdff52b5d92c2`.
 
-### U4 — implementation complete; README CI pending
+### U4 — complete
 
 - Certified CLI content analysis now honors the analyzer decision and proceeds to binary reconstruction only for `VectorReconstruction`; photo/hybrid/conservative selections fail closed instead of being forced through the binary-vector path.
 - Source foreground colors are partitioned deterministically into bounded paint regions, reconstructed independently and attached as separate `SvgPaintLayer` entries while the canonical scene geometry remains the authority for alpha-fidelity certification.
 - SVG serialization emits independent compound paint paths with their own source-derived RGB fills, preserving multiple source color regions without weakening U3 even-odd hole semantics.
 - Regression coverage proves a hard-edged logo remains vector-routed, a complex photo/hybrid-like RGBA fixture is not vector-routed, and a two-color source fixture retains two independent paint layers and serialized fills.
 - Existing vector fidelity gates remain unchanged: `IoU >= 0.995` and disagreement ratio `<= 0.005`; provenance, sanitizer, API/CLI and fail-closed acceptance behavior are unchanged.
-- U4 implementation acceptance is green on exact HEAD `2dd9ee71ff3d1fb349d3b6a7efc90c729ef98d4c` with `core-ci #361`; PR #25 was `mergeable=true` with zero unresolved blocking review threads at verification time. This README status commit must receive fresh exact-head green CI before U4 can merge.
+- U4 merged with expected-head protection after its README status commit received fresh exact-head green CI; merge commit `bdcb22163bf4f140b4e231029f4ecb8d9342466e`.
+
+### U5 — implementation complete; README CI pending
+
+- Final SVG certification now consumes the real serialized `encoded.artifact.bytes` through an independent parser/rasterizer rather than using reconstruction or pre-serialization `SvgScene` state as the candidate evidence source.
+- Final-output evidence binds the exact output SHA-256 to independently measured candidate alpha/vector fidelity, source-color MAE, component/hole topology, boundary p95 and visible-residual ratio.
+- The CLI SVG certificate path rejects invalid final evidence or digest mismatch fail-closed and records the final-artifact metrics without changing the existing vector IoU `>= 0.995` or disagreement `<= 0.005` gates.
+- Regression coverage proves final-byte digest binding, alpha/vector fidelity, source-color evidence, malformed-final-SVG rejection, fill-color sensitivity and positive compound/even-odd hole topology (`components=1`, `holes=1`) from the independently rasterized artifact.
+- U5 implementation acceptance is green on exact HEAD `50518aa2a13275ac639ef7f406074fa241ac0b97` with `core-ci #371`; PR #26 was `mergeable=true` with zero unresolved blocking review threads at verification time. This README status commit must receive fresh exact-head green CI before U5 can merge.
 
 ## Verified corrective milestones R1-R6
 
@@ -151,9 +159,9 @@ These milestones remain valuable and are not being weakened. They are prerequisi
 
 ## Current corrective priority
 
-1. Obtain fresh exact-head green CI evidence for the U4 README status commit.
+1. Obtain fresh exact-head green CI evidence for the U5 README status commit.
 2. Re-verify `mergeable=true` and zero unresolved blocking review threads.
-3. Merge U4 only with expected-head protection after all U4 acceptance evidence remains green.
-4. Open U5 only after U4 is merged, then proceed sequentially through U8.
+3. Merge U5 only with expected-head protection after all U5 acceptance evidence remains green.
+4. Open U6 only after U5 is merged, then proceed sequentially through U8.
 
 UI, account and subscription work remains deferred until the post-R6 real-user corrective program reaches its required acceptance state.
