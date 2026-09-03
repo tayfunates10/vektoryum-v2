@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <cstdint>
 #include <span>
 #include <string>
@@ -35,10 +36,23 @@ struct SvgPath {
     bool hole{false};
 };
 
+struct SvgPaintLayer {
+    // A paint layer owns a compound set of contours so holes/islands remain
+    // serialized together with even-odd semantics while distinct source color
+    // regions can retain independent fills.
+    std::vector<SvgPath> paths{};
+    std::array<std::uint8_t, 3U> fill_rgb{0U, 0U, 0U};
+};
+
 struct SvgScene {
     std::uint32_t width{};
     std::uint32_t height{};
     std::vector<SvgPath> paths{};
+    // Compatibility paint for legacy single-layer callers. U4 callers may
+    // populate paint_layers to preserve multiple source color regions without
+    // flattening hole-bearing compound geometry into a single invented fill.
+    std::array<std::uint8_t, 3U> fill_rgb{0U, 0U, 0U};
+    std::vector<SvgPaintLayer> paint_layers{};
 };
 
 enum class SvgFitError : std::uint8_t {

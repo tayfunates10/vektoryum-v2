@@ -18,6 +18,15 @@ namespace {
     return stream.str();
 }
 
+[[nodiscard]] std::string rgb_hex(const std::array<std::uint8_t, 3U>& rgb) {
+    std::ostringstream stream;
+    stream << '#' << std::hex << std::setfill('0') << std::nouppercase;
+    for (const std::uint8_t channel : rgb) {
+        stream << std::setw(2) << static_cast<unsigned int>(channel);
+    }
+    return stream.str();
+}
+
 [[nodiscard]] std::string encode_bytes(const ExportRequest& request) {
     const std::string width = std::to_string(request.width);
     const std::string height = std::to_string(request.height);
@@ -82,21 +91,34 @@ namespace {
     return text;
 }
 
-[[nodiscard]] std::string encode_svg_geometry(const ExportRequest& request, const vector::SvgScene& scene) {
-    std::ostringstream out;
-    out << "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"" << request.width
-        << "\" height=\"" << request.height << "\" viewBox=\"0 0 " << request.width << ' '
-        << request.height << "\">\n";
+void emit_svg_compound_path(
+    std::ostringstream& out,
+    const std::vector<vector::SvgPath>& paths,
+    const std::array<std::uint8_t, 3U>& fill_rgb) {
     out << "  <path d=\"";
     bool first_subpath = true;
-    for (const auto& path : scene.paths) {
+    for (const auto& path : paths) {
         if (!first_subpath) {
             out << ' ';
         }
         out << vector::serialize_svg_path_data(path);
         first_subpath = false;
     }
-    out << "\" fill=\"#000000\" fill-rule=\"evenodd\"/>\n";
+    out << "\" fill=\"" << rgb_hex(fill_rgb) << "\" fill-rule=\"evenodd\"/>\n";
+}
+
+[[nodiscard]] std::string encode_svg_geometry(const ExportRequest& request, const vector::SvgScene& scene) {
+    std::ostringstream out;
+    out << "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"" << request.width
+        << "\" height=\"" << request.height << "\" viewBox=\"0 0 " << request.width << ' '
+        << request.height << "\">\n";
+    if (scene.paint_layers.empty()) {
+        emit_svg_compound_path(out, scene.paths, scene.fill_rgb);
+    } else {
+        for (const auto& layer : scene.paint_layers) {
+            emit_svg_compound_path(out, layer.paths, layer.fill_rgb);
+        }
+    }
     out << "</svg>\n";
     return out.str();
 }

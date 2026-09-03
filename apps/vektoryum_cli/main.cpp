@@ -17,6 +17,7 @@
 #include "vektoryum/ml/artifact_digest.hpp"
 #include "vektoryum/resample/resampler.hpp"
 #include "vektoryum/vector/reconstruction.hpp"
+#include "vektoryum/vector/source_paint.hpp"
 #include "vektoryum/vector/svg_path.hpp"
 #include "vektoryum/version.hpp"
 
@@ -241,12 +242,16 @@ int run_certified_convert(
     }
 
     const auto analysis = vektoryum::analysis::analyze_rgb_f32(
-        rgb,
+        upscale_source.pixels,
         decoded.image.spec.width,
         decoded.image.spec.height,
-        3U);
+        4U);
     if (!analysis.valid) {
         std::cerr << "error: content analysis rejected decoded raster\n";
+        return static_cast<int>(vektoryum::api::ExitCode::Data);
+    }
+    if (analysis.route != vektoryum::analysis::ProcessingRoute::VectorReconstruction) {
+        std::cerr << "error: content analysis selected non-vector route\n";
         return static_cast<int>(vektoryum::api::ExitCode::Data);
     }
 
@@ -301,6 +306,11 @@ int run_certified_convert(
         std::cerr << "error: SVG path fitting rejected reconstructed geometry\n";
         return static_cast<int>(vektoryum::api::ExitCode::Data);
     }
+    auto painted_scene = fitted.scene;
+    if (!vektoryum::vector::attach_source_fill_rgb(painted_scene, decoded.image.rgba8, mask)) {
+        std::cerr << "error: source paint derivation rejected reconstructed geometry\n";
+        return static_cast<int>(vektoryum::api::ExitCode::Data);
+    }
     std::vector<std::uint8_t> certification_mask(mask.size(), 0U);
     std::transform(
         mask.begin(),
@@ -310,7 +320,7 @@ int run_certified_convert(
             return static_cast<std::uint8_t>(vektoryum::vector::coverage_is_foreground(value));
         });
     const auto fidelity = vektoryum::vector::certify_svg_scene(
-        fitted.scene,
+        painted_scene,
         certification_mask,
         decoded.image.spec.width,
         decoded.image.spec.height);
@@ -344,7 +354,7 @@ int run_certified_convert(
     const auto encoded = vektoryum::exporting::encode_geometry_export(
         export_request,
         source,
-        fitted.scene);
+        painted_scene);
     if (!encoded.ok()) {
         std::cerr << "error: geometry export failed structural validation\n";
         return static_cast<int>(vektoryum::api::ExitCode::Data);
