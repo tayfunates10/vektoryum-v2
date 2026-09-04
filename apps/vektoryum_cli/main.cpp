@@ -20,6 +20,7 @@
 #include "vektoryum/vector/reconstruction.hpp"
 #include "vektoryum/vector/source_paint.hpp"
 #include "vektoryum/vector/svg_path.hpp"
+#include "vektoryum/vector/upscale_reconstruction.hpp"
 #include "vektoryum/version.hpp"
 
 namespace {
@@ -294,24 +295,17 @@ int run_certified_convert(
         }
     }
 
-    const auto reconstructed = vektoryum::vector::reconstruct_binary_mask(
-        mask,
+    const auto upscale_reconstruction = vektoryum::vector::reconstruct_from_upscaled_rgba(
+        upscaled.image,
+        has_transparency,
         decoded.image.spec.width,
         decoded.image.spec.height);
-    if (!reconstructed.ok()) {
-        std::cerr << "error: vector reconstruction rejected input\n";
+    if (!upscale_reconstruction.valid) {
+        std::cerr << "error: vector reconstruction rejected actual upscale result\n";
         return static_cast<int>(vektoryum::api::ExitCode::Data);
     }
-    const auto fitted = vektoryum::vector::fit_svg_paths(reconstructed.scene);
-    if (!fitted.ok()) {
-        std::cerr << "error: SVG path fitting rejected reconstructed geometry\n";
-        return static_cast<int>(vektoryum::api::ExitCode::Data);
-    }
-    auto painted_scene = fitted.scene;
-    if (!vektoryum::vector::attach_source_fill_rgb(painted_scene, decoded.image.rgba8, mask)) {
-        std::cerr << "error: source paint derivation rejected reconstructed geometry\n";
-        return static_cast<int>(vektoryum::api::ExitCode::Data);
-    }
+    auto painted_scene = upscale_reconstruction.scene;
+
     std::vector<std::uint8_t> certification_mask(mask.size(), 0U);
     std::transform(
         mask.begin(),
@@ -378,8 +372,16 @@ int run_certified_convert(
         }
         quality = final_evidence.canonical_quality;
     } else {
+        const auto reference_reconstruction = vektoryum::vector::reconstruct_binary_mask(
+            mask,
+            decoded.image.spec.width,
+            decoded.image.spec.height);
+        if (!reference_reconstruction.ok()) {
+            std::cerr << "error: non-SVG reference reconstruction rejected input\n";
+            return static_cast<int>(vektoryum::api::ExitCode::Data);
+        }
         auto candidate_mask = vektoryum::vector::rasterize_even_odd(
-            reconstructed.scene,
+            reference_reconstruction.scene,
             decoded.image.spec.width,
             decoded.image.spec.height);
         const auto candidate_alpha = candidate_mask;
