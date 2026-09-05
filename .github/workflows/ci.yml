@@ -45,6 +45,20 @@ jobs:
       - name: Test
         run: ctest --test-dir build -C Release --output-on-failure
 
+      - name: Configure U7 production CLI cubic regression
+        run: cmake -S tests/u7_cli_cubic -B build-u7 -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build U7 production CLI cubic regression
+        run: cmake --build build-u7 --config Release --parallel
+
+      - name: U7 production CLI cubic regression (Unix)
+        if: runner.os != 'Windows'
+        run: ./build-u7/vektoryum_u7_cli_cubic_test ./build/vektoryum_cli
+
+      - name: U7 production CLI cubic regression (Windows)
+        if: runner.os == 'Windows'
+        run: .\build-u7\Release\vektoryum_u7_cli_cubic_test.exe .\build\Release\vektoryum_cli.exe
+
       - name: CLI contract test
         run: cmake -DBUILD_DIR=build -P tests/cli_contract.cmake
 

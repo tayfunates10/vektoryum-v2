@@ -2,7 +2,7 @@
 
 Contract/infrastructure roadmap completion: **100%**
 
-Functional end-user product readiness: **post-R6 real-user corrective program active; U1-U5 complete, U6 implementation acceptance complete and README exact-head CI pending**.
+Functional end-user product readiness: **post-R6 real-user corrective program active; U1-U6 complete, U7 implementation acceptance complete and README exact-head CI pending**.
 
 The Stage 0-13 contract roadmap and corrective R1-R6 implementation are complete, but a 2026-09-01 real-user audit proved that this still does **not** establish general-user raster-to-vector readiness. The measured audit exposed alpha/coverage semantic inconsistency, topology ambiguity on realistic contours, broken serialized SVG hole semantics, loss of source colors, certification that was not derived from the final serialized output, an upscale path that did not feed reconstruction, and cubic recovery that was not exercised by the real CLI path. These are tracked as a strict post-R6 U1-U8 corrective program. Existing quality thresholds, provenance, sanitizer behavior, API/CLI contracts and fail-closed acceptance gates remain immutable unless a later roadmap stage explicitly adds a stricter gate.
 
@@ -49,8 +49,8 @@ The post-roadmap visual audit exposed gaps that the contract-focused acceptance 
 | U3 | Compound-path hole hierarchy and serialized SVG hole semantics validated from emitted output | complete |
 | U4 | Preserve color regions/layers/fills and honor analyzer routing instead of forcing all inputs through binary vectorization | complete |
 | U5 | Derive final certification from independently rasterized serialized output with real alpha/color/component-hole/boundary/residual metrics | complete |
-| U6 | Feed the actual upscale result into reconstruction or fail the claimed upscale chain | implementation complete; README exact-head CI pending |
-| U7 | Enable fidelity-gated cubic fitting on the real CLI production path | pending |
+| U6 | Feed the actual upscale result into reconstruction or fail the claimed upscale chain | complete |
+| U7 | Enable fidelity-gated cubic fitting on the real CLI production path | implementation complete; README exact-head CI pending |
 | U8 | Lock the eight real-user fixtures and production component/residual/boundary gates without weakening existing vector gates | pending |
 
 ## Verified post-R6 milestones
@@ -58,55 +58,55 @@ The post-roadmap visual audit exposed gaps that the contract-focused acceptance 
 ### U1 — complete
 
 - `canonical_coverage_threshold` is explicitly fixed at 128 and `coverage_is_foreground()` is the shared foreground definition.
-- Reconstruction defaults, certification-mask normalization and rasterize-back candidate-mask normalization now use the same canonical `coverage >= 128` semantic; the previous `>=128` versus `!=0` mismatch is removed without changing the threshold.
-- Soft-alpha source coverage is preserved as the quality reference for transparent inputs, while opaque binary-vector inputs use the actual reconstruction mask as the alpha reference rather than an unrelated all-255 source-alpha plane.
+- Reconstruction defaults, certification-mask normalization and rasterize-back candidate-mask normalization use the same canonical `coverage >= 128` semantic.
 - Candidate alpha is measured from rasterized reconstructed geometry instead of assigning the source alpha to both reference and candidate.
 - Regression coverage locks the 127/128 boundary and proves rasterize-back IoU is exact when the same canonical coverage definition is used.
-- Existing vector fidelity gates remain unchanged: `IoU >= 0.995` and disagreement ratio `<= 0.005`. Existing quality, provenance, sanitizer, API/CLI and fail-closed contracts are unchanged.
-- U1 merged only after its README status commit received fresh exact-head green CI with `mergeable=true` and zero unresolved blocking review threads.
+- Existing vector fidelity gates remain unchanged: `IoU >= 0.995` and disagreement ratio `<= 0.005`.
 
 ### U2 — complete
 
-- Checkerboard/saddle contour junctions no longer fail solely because multiple outgoing edges share a grid vertex; reconstruction selects the next unused edge with a deterministic orientation-aware priority and stable coordinate tie-break.
-- Diagonal-only touching foreground components remain separate contours rather than being spuriously connected across a saddle junction.
-- Regression executes the same 2x2 diagonal fixture twice and requires identical contour count, ordering and points, proving deterministic topology resolution.
-- Rasterize-back of the diagonal fixture is required to match the canonical foreground exactly with IoU `1.0`, certification passed and disagreement ratio `0.0`.
-- A JPEG-like anti-aliased saddle fixture locks the canonical `coverage >= 128` interpretation and requires the same deterministic two-contour topology plus exact canonical rasterize-back fidelity.
-- Existing vector fidelity gates remain unchanged: `IoU >= 0.995` and disagreement ratio `<= 0.005`; provenance, sanitizer, API/CLI and fail-closed acceptance behavior are unchanged.
-- U2 merged only after its README status commit exact HEAD `33da4594404480547d062da20805e43ec08f960f` received fresh green `core-ci #335`, with `mergeable=true`, zero unresolved blocking review threads, and expected-head merge protection; merge commit `4dae4393033b0f2ec0b60b402c8291b37fd1f178`.
+- Checkerboard/saddle contour junctions select the next unused edge with deterministic orientation-aware priority and stable coordinate tie-break.
+- Diagonal-only touching foreground components remain separate contours.
+- Regression requires deterministic contour ordering and exact canonical rasterize-back fidelity.
+- Existing vector fidelity gates remain unchanged.
 
 ### U3 — complete
 
-- SVG geometry serialization emits reconstructed contours as subpaths of one compound `<path>` rather than independent filled `<path>` elements.
-- `fill-rule="evenodd"` remains mandatory so nested contour parity is represented as outer fill → hole → nested island in the emitted SVG.
-- Regression coverage requires exactly one compound SVG path for the nested fixture and explicitly verifies both the hole subpath and nested-island subpath are present in serialized output.
-- Existing vector fidelity gates remain unchanged: `IoU >= 0.995` and disagreement ratio `<= 0.005`; provenance, sanitizer, API/CLI and fail-closed acceptance behavior are unchanged.
-- U3 merged with expected-head protection after its README status commit received fresh exact-head green CI; merge commit `56c03a32f479da9260f3b5791e2bdff52b5d92c2`.
+- SVG geometry serialization emits reconstructed contours as subpaths of one compound `<path>`.
+- `fill-rule="evenodd"` preserves nested outer fill → hole → nested island parity.
+- Regression verifies compound path and hole/island subpaths in serialized output.
+- Existing vector fidelity gates remain unchanged.
 
 ### U4 — complete
 
-- Certified CLI content analysis now honors the analyzer decision and proceeds to binary reconstruction only for `VectorReconstruction`; photo/hybrid/conservative selections fail closed instead of being forced through the binary-vector path.
-- Source foreground colors are partitioned deterministically into bounded paint regions, reconstructed independently and attached as separate `SvgPaintLayer` entries while the canonical scene geometry remains the authority for alpha-fidelity certification.
-- SVG serialization emits independent compound paint paths with their own source-derived RGB fills, preserving multiple source color regions without weakening U3 even-odd hole semantics.
-- Regression coverage proves a hard-edged logo remains vector-routed, a complex photo/hybrid-like RGBA fixture is not vector-routed, and a two-color source fixture retains two independent paint layers and serialized fills.
-- Existing vector fidelity gates remain unchanged: `IoU >= 0.995` and disagreement ratio `<= 0.005`; provenance, sanitizer, API/CLI and fail-closed acceptance behavior are unchanged.
-- U4 merged with expected-head protection after its README status commit received fresh exact-head green CI; merge commit `bdcb22163bf4f140b4e231029f4ecb8d9342466e`.
+- Certified CLI content analysis honors the analyzer route and proceeds to binary reconstruction only for `VectorReconstruction`.
+- Source foreground colors are partitioned deterministically into bounded paint regions and serialized as independent compound paint layers.
+- Regression proves vector routing, non-vector fail-closed routing and multi-color source preservation.
+- Existing vector fidelity gates remain unchanged.
 
 ### U5 — complete
 
-- Final SVG certification now consumes the real serialized `encoded.artifact.bytes` through an independent parser/rasterizer rather than using reconstruction or pre-serialization `SvgScene` state as the candidate evidence source.
-- Final-output evidence binds the exact output SHA-256 to independently measured candidate alpha/vector fidelity, source-color MAE, component/hole topology, boundary p95 and visible-residual ratio.
-- The CLI SVG certificate path rejects invalid final evidence or digest mismatch fail-closed and records the final-artifact metrics without changing the existing vector IoU `>= 0.995` or disagreement `<= 0.005` gates.
-- Regression coverage proves final-byte digest binding, alpha/vector fidelity, source-color evidence, malformed-final-SVG rejection, fill-color sensitivity and positive compound/even-odd hole topology (`components=1`, `holes=1`) from the independently rasterized artifact.
-- U5 merged with expected-head protection after its README status commit exact HEAD `37531a9f269f122123772c2f6a7d3b1f81ce65bb` received green `core-ci #372`; merge commit `080784419d7c9d6e4dc957645362334a6179f0d8`.
+- Final SVG certification consumes the real serialized `encoded.artifact.bytes` through an independent parser/rasterizer.
+- Final-output evidence binds exact output SHA-256 to independently measured alpha/vector fidelity, source-color MAE, component/hole topology, boundary p95 and visible-residual ratio.
+- Regression proves final-byte digest binding, malformed-final-SVG rejection, fill-color sensitivity and compound/even-odd hole topology.
+- U5 merged with expected-head protection after exact-head green `core-ci #372`; merge commit `080784419d7c9d6e4dc957645362334a6179f0d8`.
 
-### U6 — implementation complete; README CI pending
+### U6 — complete
 
-- The certified CLI now passes the actual `upscaled.image` into `reconstruct_from_upscaled_rgba()` instead of reconstructing geometry from the original-resolution source mask.
-- The reconstruction helper treats the upscale output as the sole geometry/paint authority, deterministically samples that upscale result to the requested source grid for like-for-like fidelity certification, derives straight-sRGB/coverage from that sampled upscale surface, and fails closed on invalid surface contracts.
-- Regression coverage changes only the supplied upscale surface and requires the reconstructed production geometry to change, proving the upscale result is behaviorally connected to reconstruction rather than used only for provenance.
-- The U6 regression also requires the committed fidelity gates to remain `IoU >= 0.995` and disagreement ratio `<= 0.005`; no quality, provenance, sanitizer or API/CLI acceptance threshold was weakened.
-- U6 implementation acceptance is green on exact HEAD `73408a2c10372c5542d72a3dc754479b930354d5` with `core-ci #379`; PR #27 is `mergeable=true` with zero unresolved blocking review threads. This README status commit must receive fresh exact-head green CI before U6 can merge.
+- The certified CLI passes the actual `upscaled.image` into `reconstruct_from_upscaled_rgba()` instead of reconstructing geometry from the original-resolution source mask.
+- The reconstruction helper treats the upscale output as the sole geometry/paint authority and fails closed on invalid surface contracts.
+- Regression changes only the supplied upscale surface and requires reconstructed production geometry to change, proving the upscale result is behaviorally connected to reconstruction.
+- Existing vector fidelity gates remain `IoU >= 0.995` and disagreement ratio `<= 0.005`; no quality, provenance, sanitizer or API/CLI threshold was weakened.
+- U6 merged with expected-head protection from exact HEAD `453e40a614455e29091594e3c3656ac73a19a992`; merge commit `c599d3df8395e3305fcdd64b9c390b97dd7755af`.
+
+### U7 — implementation complete; README CI pending
+
+- Production upscale reconstruction now invokes `recover_curves_certified()` instead of unconditional polygon-only fitting.
+- Cubic candidates are accepted only through the existing `certify_svg_scene()` fidelity gate; candidate radius may decrease deterministically, but certification thresholds remain unchanged.
+- If no cubic candidate passes, the exact polygon remains authoritative, preserving fail-closed fidelity behavior.
+- The production CLI regression executes a real TIFF fixture through `--certified-convert ... svg`, requires emitted `<path>` geometry to contain a cubic `C` command, and requires the quality-certificate artifact to remain present.
+- The U7 regression is wired directly into `core-ci` and passed on Ubuntu, macOS and Windows in exact-head `core-ci #389` for implementation HEAD `84b072e99509853dd093303deecaa1bbf57e222e`; source hygiene and Linux ASan/UBSan also passed.
+- Existing vector fidelity gates remain `IoU >= 0.995` and disagreement ratio `<= 0.005`; provenance, sanitizer, API/CLI contracts and acceptance thresholds are unchanged. This README status commit must receive fresh exact-head green CI before U7 can merge.
 
 ## Verified corrective milestones R1-R6
 
@@ -117,45 +117,31 @@ The post-roadmap visual audit exposed gaps that the contract-focused acceptance 
 
 ### R2 — complete
 
-- Bounded real raster ingestion recognizes PNG/JPEG/WebP/TIFF by content rather than file extension and fails closed on invalid/unsupported inputs.
-- Accepted raster inputs normalize deterministically to canonical RGBA8, sRGB transfer/primaries and straight alpha semantics.
-- PNG acceptance covers supported 8-bit Gray/RGB/Gray+Alpha/RGBA paths, scanline filters, CRC/Adler checks, stored/fixed/dynamic DEFLATE and color-management policy.
-- JPEG acceptance covers baseline grayscale and normal three-component color sampling/subsampling paths required by the corrective acceptance suite.
-- WebP acceptance exercises real multi-pixel lossless VP8L fixtures including RGB/alpha, palette/transform/predictor/back-reference behavior and deterministic decode.
-- TIFF acceptance covers supported Gray/RGB/RGBA, byte-order/strip handling and associated-alpha normalization.
+- Bounded real raster ingestion recognizes PNG/JPEG/WebP/TIFF by content and normalizes accepted inputs to canonical RGBA8.
 - CLI `--convert INPUT OUTPUT` is exercised across PNG/JPEG/WebP/TIFF and emits deterministic canonical PAM RGBA8 output.
 
 ### R3 — complete
 
-- The separable resampler no longer clamps the horizontal intermediate pass; production local-range clamping is applied to the final reconstructed sample against the original 2D contributing source neighborhood, removing the axis-biased clipping mechanism without changing half-pixel mapping, Lanczos-3 reconstruction, normalized weights, anti-alias behavior or production clamping policy.
-- Fixture-based measured quality gates require smooth-RGB round-trip PSNR ≥ 35 dB and SSIM ≥ 0.98.
-- Premultiplied-alpha regression coverage prevents transparent-edge hidden-RGB leakage and keeps reconstructed RGB bounded by alpha.
-- An 8× transpose-invariance visual-regression fixture gates horizontal/vertical artifact bias with a maximum axis delta of 1e-5.
-- R3 was merged only after its README status commit received fresh exact-head green CI evidence.
+- The separable resampler applies production local-range clamping to the final reconstructed sample against the original 2D contributing source neighborhood.
+- Fixture quality gates require smooth-RGB round-trip PSNR ≥ 35 dB and SSIM ≥ 0.98.
+- Premultiplied-alpha and transpose-invariance regressions guard edge leakage and axis bias.
 
 ### R4 — complete
 
-- Dense reconstructed contours can be simplified deterministically and fitted to cubic Bézier geometry rather than remaining dense polyline-only output.
-- Node reduction is accepted only when the independently rasterized curved candidate passes the existing fidelity certification gate (`IoU ≥ 0.995`, disagreement ratio `≤ 0.005`).
-- Failed curve candidates fall back to the exact polygon; acceptance thresholds are never relaxed to force node reduction.
-- Circle regression coverage proves cubic geometry emission, node reduction, fidelity preservation and deterministic serialization; strict exact-fidelity coverage proves fail-safe polygon fallback.
-- R4 implementation acceptance is green on exact HEAD `efd35aeee4657529b91930a225dcf4120a5c754d` with `core-ci #299`; the subsequent README status commit also received fresh exact-head green evidence before merge.
+- Dense reconstructed contours can be simplified deterministically and fitted to cubic Bézier geometry.
+- Node reduction is accepted only when the independently rasterized curved candidate passes `IoU ≥ 0.995` and disagreement ratio `≤ 0.005`.
+- Failed curve candidates fall back to the exact polygon.
 
 ### R5 — complete
 
-- SVG, PDF, EPS and DXF geometry export is driven by reconstructed `SvgScene` paths rather than placeholder/canonical payloads.
-- Linear and cubic path geometry is preserved in each format; even-odd fill semantics are retained for SVG/PDF/EPS and cubic curves are represented as DXF SPLINE entities.
-- Geometry export remains behind the existing request/provenance/output-byte contract checks and rejects empty or structurally invalid scenes.
-- Format-aware artifact validation rejects malformed SVG/PDF/EPS/DXF structures, while regression coverage proves exported digests change when reconstructed geometry changes.
-- R5 implementation acceptance is green on exact HEAD `1b8fdaae750e5a9d4b098c266d5f0212be6e54dc` with `core-ci #303`; its README status commit subsequently received fresh exact-head green evidence before merge.
+- SVG, PDF, EPS and DXF geometry export is driven by reconstructed `SvgScene` paths.
+- Linear and cubic geometry plus required fill semantics are preserved behind provenance and structural validation contracts.
 
 ### R6 — complete
 
-- CLI `--certified-convert INPUT OUTPUT FORMAT` executes a real bounded raster input through decode, content analysis, canonical linear-light premultiplied-alpha preparation, Lanczos3 2× upscale, vector reconstruction, cubic path fitting/fidelity certification, geometry-backed SVG/PDF/EPS/DXF export, measured quality/performance evidence and provenance-bound quality-certificate issuance.
-- Upscale evidence is bound into the chain identity with SHA-256; export and certificate identities remain tied to real input-derived provenance.
-- Fidelity certification retains the existing `IoU ≥ 0.995` and disagreement ratio `<= 0.005` gates; binary mask normalization fixes representation mismatches without weakening acceptance.
-- CLI integration executes the end-to-end path for SVG, PDF, EPS and DXF and requires real non-empty export/certificate artifacts plus measured evidence.
-- R6 was merged after exact-head green CI and merge-gate verification; the later real-user audit is the authority for the U1-U8 corrective work and supersedes any earlier broad product-readiness claim.
+- CLI `--certified-convert INPUT OUTPUT FORMAT` executes real raster input through decode, analysis, upscale/vector reconstruction, export, measured quality/performance evidence and provenance-bound quality-certificate issuance.
+- Fidelity certification retains `IoU ≥ 0.995` and disagreement ratio `<= 0.005`.
+- The later real-user audit is the authority for U1-U8 and supersedes any earlier broad product-readiness claim.
 
 ## Verified contract milestones
 
@@ -163,13 +149,13 @@ The post-roadmap visual audit exposed gaps that the contract-focused acceptance 
 - Stage 12 established deterministic Core API and CLI contract behavior.
 - Stage 13 established deterministic release/package identity, substitution rejection, hostile-path/residue rejection and staged CLI contract verification across Ubuntu, Windows and macOS.
 
-These milestones remain valuable and are not being weakened. They are prerequisites, not substitutes, for a working visual conversion product.
+These milestones remain prerequisites, not substitutes, for working visual conversion quality.
 
 ## Current corrective priority
 
-1. Obtain fresh exact-head green CI evidence for the U6 README status commit.
+1. Obtain fresh exact-head green CI evidence for the U7 README status commit.
 2. Re-verify `mergeable=true` and zero unresolved blocking review threads.
-3. Merge U6 only with expected-head protection after all U6 acceptance evidence remains green.
-4. Open U7 only after U6 is merged, then proceed sequentially through U8.
+3. Merge U7 only with expected-head protection after all U7 acceptance evidence remains green.
+4. Open U8 only after U7 is merged and then complete the eight-fixture production-quality gate pack without weakening existing gates.
 
 UI, account and subscription work remains deferred until the post-R6 real-user corrective program reaches its required acceptance state.

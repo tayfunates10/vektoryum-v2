@@ -8,6 +8,7 @@
 
 #include "vektoryum/core/color.hpp"
 #include "vektoryum/resample/resampler.hpp"
+#include "vektoryum/vector/curve_recovery.hpp"
 #include "vektoryum/vector/reconstruction.hpp"
 #include "vektoryum/vector/source_paint.hpp"
 #include "vektoryum/vector/svg_path.hpp"
@@ -16,7 +17,9 @@ namespace vektoryum::vector {
 
 struct UpscaleReconstructionResult {
     bool valid{false};
+    bool used_curves{false};
     SvgScene scene{};
+    SvgCertificationReport curve_certification{};
     std::vector<std::uint8_t> rgba8{};
     std::vector<std::uint8_t> coverage{};
 };
@@ -83,6 +86,9 @@ namespace detail {
 // grid so the existing source-space fidelity gate can compare like-for-like
 // pixels without loosening its IoU/disagreement thresholds. No original mask or
 // decoded source pixels participate in geometry or paint reconstruction here.
+// Cubic recovery is attempted on the production geometry and is accepted only
+// through the existing certify_svg_scene thresholds (IoU >= 0.995 and
+// disagreement <= 0.005); rejected candidates fail back to the exact polygon.
 [[nodiscard]] inline UpscaleReconstructionResult reconstruct_from_upscaled_rgba(
     const resample::FloatImage& upscaled,
     bool source_has_transparency,
@@ -122,11 +128,28 @@ namespace detail {
     if (!reconstructed.ok()) {
         return result;
     }
-    const auto fitted = fit_svg_paths(reconstructed.scene);
-    if (!fitted.ok()) {
+
+    std::vector<std::uint8_t> reference_mask(result.coverage.size(), 0U);
+    std::transform(
+        result.coverage.begin(),
+        result.coverage.end(),
+        reference_mask.begin(),
+        [](std::uint8_t value) {
+            return static_cast<std::uint8_t>(coverage_is_foreground(value));
+        });
+
+    const auto recovered = recover_curves_certified(
+        reconstructed.scene,
+        reference_mask,
+        target_width,
+        target_height);
+    if (!recovered.ok()) {
         return result;
     }
-    result.scene = fitted.scene;
+    result.scene = recovered.scene;
+    result.used_curves = recovered.used_curves;
+    result.curve_certification = recovered.certification;
+
     if (!attach_source_fill_rgb(result.scene, result.rgba8, result.coverage)) {
         result.scene = {};
         return result;

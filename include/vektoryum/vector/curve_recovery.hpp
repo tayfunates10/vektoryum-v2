@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -106,11 +107,40 @@ namespace detail {
     return false;
 }
 
+[[nodiscard]] inline bool try_certified_curve_candidate(
+    CurveRecoveryResult& result,
+    const VectorScene& candidate,
+    std::size_t recovered_nodes,
+    std::span<const std::uint8_t> reference_mask,
+    std::uint32_t width,
+    std::uint32_t height,
+    double corner_radius,
+    const SvgCertificationOptions& certification) {
+    if (corner_radius <= 0.0) {
+        return false;
+    }
+    const auto curved = fit_svg_paths(candidate, {.corner_radius = corner_radius});
+    if (!curved.ok() || !contains_cubic_commands(curved.scene)) {
+        return false;
+    }
+    const auto quality = certify_svg_scene(
+        curved.scene, reference_mask, width, height, certification);
+    if (!quality.passed()) {
+        return false;
+    }
+    result.scene = curved.scene;
+    result.certification = quality;
+    result.recovered_nodes = recovered_nodes;
+    result.used_curves = true;
+    return true;
+}
+
 }  // namespace detail
 
 // Recover a lower-node cubic representation only when it independently passes
-// the existing rasterize-back fidelity gate. Failed candidates fall back to the
-// exact polygon; acceptance thresholds are never relaxed to obtain reduction.
+// the existing rasterize-back fidelity gate. Failed candidates progressively
+// reduce only their curve radius; certification thresholds remain unchanged.
+// If no cubic candidate passes, the exact polygon remains authoritative.
 [[nodiscard]] inline CurveRecoveryResult recover_curves_certified(
     const VectorScene& scene,
     std::span<const std::uint8_t> reference_mask,
@@ -130,18 +160,36 @@ namespace detail {
     for (Path& path : simplified.paths) {
         path.points = detail::simplify_closed_curve_path(path.points, options.simplify_tolerance);
     }
-
     const std::size_t simplified_nodes = detail::curve_node_count(simplified);
-    const auto curved = fit_svg_paths(simplified, {.corner_radius = options.corner_radius});
-    if (curved.ok()) {
-        const auto quality = certify_svg_scene(
-            curved.scene, reference_mask, width, height, options.certification);
-        if (quality.passed()) {
-            result.scene = curved.scene;
-            result.certification = quality;
-            result.recovered_nodes = simplified_nodes;
-            result.used_curves = detail::contains_cubic_commands(curved.scene);
+
+    const std::array<double, 4U> radius_scales{1.0, 0.5, 0.25, 0.125};
+    for (const double scale : radius_scales) {
+        if (detail::try_certified_curve_candidate(
+                result,
+                simplified,
+                simplified_nodes,
+                reference_mask,
+                width,
+                height,
+                options.corner_radius * scale,
+                options.certification)) {
             return result;
+        }
+    }
+
+    if (simplified_nodes != result.source_nodes) {
+        for (const double scale : radius_scales) {
+            if (detail::try_certified_curve_candidate(
+                    result,
+                    scene,
+                    result.source_nodes,
+                    reference_mask,
+                    width,
+                    height,
+                    options.corner_radius * scale,
+                    options.certification)) {
+                return result;
+            }
         }
     }
 
