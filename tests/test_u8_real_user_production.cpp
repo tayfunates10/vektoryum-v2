@@ -209,7 +209,7 @@ int main(int argc, char** argv) {
     constexpr std::array<std::uint8_t, 3U> blue{20U, 40U, 160U};
 
     auto logo_block = make_canvas(width, height);
-    fill_rect(logo_block, width, 6U, 8U, 26U, 24U, black);
+    fill_rect(logo_block, width, 6U, 6U, 26U, 26U, black);
     run_fixture(cli, dir, "real_user_01_logo_block", width, height, logo_block);
 
     auto logo_hole = make_canvas(width, height);
