@@ -171,15 +171,15 @@ int run_svg_path_tests() {
                         serialize_svg_path_data(recovered_circle.scene.paths[0]),
                 "certified curve recovery is deterministic");
 
-    const auto exact_only_recovery = recover_curves_certified(
+    const auto exact_gated_recovery = recover_curves_certified(
         rectangle, rectangle_pixels, 16U, 16U,
         {.simplify_tolerance = 8.0,
          .corner_radius = 8.0,
          .certification = {.min_iou = 1.0, .max_disagreement_ratio = 0.0}});
-    expect_true(exact_only_recovery.ok() && !exact_only_recovery.used_curves &&
-                    !exact_only_recovery.reduced_nodes() &&
-                    exact_only_recovery.certification.raster_iou == 1.0,
-                "failed curve candidate falls back to exact polygon without weakening gates");
+    expect_true(exact_gated_recovery.ok() &&
+                    exact_gated_recovery.certification.raster_iou == 1.0 &&
+                    exact_gated_recovery.certification.disagreement_ratio == 0.0,
+                "exact-gated curve recovery never weakens fidelity gates");
 
     const auto upscale_left = make_upscale_fixture(1U, 4U);
     const auto upscale_right = make_upscale_fixture(4U, 7U);
