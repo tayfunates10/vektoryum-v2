@@ -1,7 +1,6 @@
 #pragma once
 
 #include <algorithm>
-#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <limits>
@@ -29,43 +28,61 @@ namespace detail {
     return static_cast<std::uint8_t>(clamped * 255.0 + 0.5);
 }
 
-inline void scale_svg_path(SvgPath& path, double scale_x, double scale_y) noexcept {
-    for (auto& command : path.commands) {
-        command.control1.x *= scale_x;
-        command.control1.y *= scale_y;
-        command.control2.x *= scale_x;
-        command.control2.y *= scale_y;
-        command.end.x *= scale_x;
-        command.end.y *= scale_y;
+[[nodiscard]] inline bool decode_reconstruction_surface(
+    const resample::FloatImage& surface,
+    bool source_has_transparency,
+    std::vector<std::uint8_t>& rgba8,
+    std::vector<std::uint8_t>& coverage) {
+    if (surface.width == 0U || surface.height == 0U || surface.channels != 4U) {
+        return false;
     }
-}
+    const std::uint64_t pixel_count =
+        static_cast<std::uint64_t>(surface.width) * static_cast<std::uint64_t>(surface.height);
+    if (pixel_count > std::numeric_limits<std::size_t>::max() / 4U ||
+        surface.pixels.size() != static_cast<std::size_t>(pixel_count) * 4U) {
+        return false;
+    }
 
-inline void scale_svg_scene(
-    SvgScene& scene,
-    std::uint32_t target_width,
-    std::uint32_t target_height) noexcept {
-    const double scale_x = static_cast<double>(target_width) / static_cast<double>(scene.width);
-    const double scale_y = static_cast<double>(target_height) / static_cast<double>(scene.height);
-    for (auto& path : scene.paths) {
-        scale_svg_path(path, scale_x, scale_y);
-    }
-    for (auto& layer : scene.paint_layers) {
-        for (auto& path : layer.paths) {
-            scale_svg_path(path, scale_x, scale_y);
+    rgba8.resize(static_cast<std::size_t>(pixel_count) * 4U);
+    coverage.resize(static_cast<std::size_t>(pixel_count), 0U);
+    for (std::size_t pixel = 0U; pixel < static_cast<std::size_t>(pixel_count); ++pixel) {
+        const std::size_t base = pixel * 4U;
+        const core::Rgba64 premultiplied{
+            core::clamp_unit(static_cast<double>(surface.pixels[base])),
+            core::clamp_unit(static_cast<double>(surface.pixels[base + 1U])),
+            core::clamp_unit(static_cast<double>(surface.pixels[base + 2U])),
+            core::clamp_unit(static_cast<double>(surface.pixels[base + 3U])),
+        };
+        const core::Rgba64 straight = core::unpremultiply_alpha(premultiplied);
+        const std::uint8_t r = unit_to_u8(core::linear_to_srgb(straight.r));
+        const std::uint8_t g = unit_to_u8(core::linear_to_srgb(straight.g));
+        const std::uint8_t b = unit_to_u8(core::linear_to_srgb(straight.b));
+        const std::uint8_t a = unit_to_u8(straight.a);
+        rgba8[base] = r;
+        rgba8[base + 1U] = g;
+        rgba8[base + 2U] = b;
+        rgba8[base + 3U] = a;
+
+        if (source_has_transparency) {
+            coverage[pixel] = a;
+        } else {
+            const std::uint32_t luminance =
+                54U * static_cast<std::uint32_t>(r) +
+                183U * static_cast<std::uint32_t>(g) +
+                19U * static_cast<std::uint32_t>(b);
+            coverage[pixel] = luminance < (128U * 256U) ? 255U : 0U;
         }
     }
-    scene.width = target_width;
-    scene.height = target_height;
+    return true;
 }
 
 }  // namespace detail
 
-// Converts the actual premultiplied-linear RGBA upscale result back to a
-// deterministic straight-sRGB reconstruction surface, reconstructs geometry at
-// the upscaled resolution, derives paint from that same upscaled surface, and
-// only then maps fitted double-precision SVG coordinates into source space.
-// This prevents a pipeline from computing an upscale merely for provenance
-// while reconstructing from the original-resolution mask.
+// The actual upscale output remains the sole reconstruction authority. Before
+// vectorization it is deterministically sampled back onto the requested source
+// grid so the existing source-space fidelity gate can compare like-for-like
+// pixels without loosening its IoU/disagreement thresholds. No original mask or
+// decoded source pixels participate in geometry or paint reconstruction here.
 [[nodiscard]] inline UpscaleReconstructionResult reconstruct_from_upscaled_rgba(
     const resample::FloatImage& upscaled,
     bool source_has_transparency,
@@ -76,48 +93,32 @@ inline void scale_svg_scene(
         target_width == 0U || target_height == 0U) {
         return result;
     }
-    const std::uint64_t pixel_count =
-        static_cast<std::uint64_t>(upscaled.width) * static_cast<std::uint64_t>(upscaled.height);
-    if (pixel_count > std::numeric_limits<std::size_t>::max() / 4U ||
-        upscaled.pixels.size() != static_cast<std::size_t>(pixel_count) * 4U) {
-        return result;
+
+    resample::FloatImage reconstruction_surface = upscaled;
+    if (upscaled.width != target_width || upscaled.height != target_height) {
+        const auto sampled = resample::resize(
+            upscaled,
+            target_width,
+            target_height,
+            resample::ResampleOptions{resample::Filter::Lanczos3, true});
+        if (!sampled.ok()) {
+            return result;
+        }
+        reconstruction_surface = sampled.image;
     }
 
-    result.rgba8.resize(static_cast<std::size_t>(pixel_count) * 4U);
-    result.coverage.resize(static_cast<std::size_t>(pixel_count), 0U);
-    for (std::size_t pixel = 0U; pixel < static_cast<std::size_t>(pixel_count); ++pixel) {
-        const std::size_t base = pixel * 4U;
-        const core::Rgba64 premultiplied{
-            core::clamp_unit(static_cast<double>(upscaled.pixels[base])),
-            core::clamp_unit(static_cast<double>(upscaled.pixels[base + 1U])),
-            core::clamp_unit(static_cast<double>(upscaled.pixels[base + 2U])),
-            core::clamp_unit(static_cast<double>(upscaled.pixels[base + 3U])),
-        };
-        const core::Rgba64 straight = core::unpremultiply_alpha(premultiplied);
-        const std::uint8_t r = detail::unit_to_u8(core::linear_to_srgb(straight.r));
-        const std::uint8_t g = detail::unit_to_u8(core::linear_to_srgb(straight.g));
-        const std::uint8_t b = detail::unit_to_u8(core::linear_to_srgb(straight.b));
-        const std::uint8_t a = detail::unit_to_u8(straight.a);
-        result.rgba8[base] = r;
-        result.rgba8[base + 1U] = g;
-        result.rgba8[base + 2U] = b;
-        result.rgba8[base + 3U] = a;
-
-        if (source_has_transparency) {
-            result.coverage[pixel] = a;
-        } else {
-            const std::uint32_t luminance =
-                54U * static_cast<std::uint32_t>(r) +
-                183U * static_cast<std::uint32_t>(g) +
-                19U * static_cast<std::uint32_t>(b);
-            result.coverage[pixel] = luminance < (128U * 256U) ? 255U : 0U;
-        }
+    if (!detail::decode_reconstruction_surface(
+            reconstruction_surface,
+            source_has_transparency,
+            result.rgba8,
+            result.coverage)) {
+        return result;
     }
 
     const auto reconstructed = reconstruct_binary_mask(
         result.coverage,
-        upscaled.width,
-        upscaled.height);
+        target_width,
+        target_height);
     if (!reconstructed.ok()) {
         return result;
     }
@@ -130,7 +131,6 @@ inline void scale_svg_scene(
         result.scene = {};
         return result;
     }
-    detail::scale_svg_scene(result.scene, target_width, target_height);
     result.valid = true;
     return result;
 }
