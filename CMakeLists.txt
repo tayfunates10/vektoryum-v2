@@ -184,6 +184,9 @@ vektoryum_apply_warnings(vektoryum_webp_decode_tests)
 add_executable(vektoryum_cli_convert_matrix_tests tests/test_cli_convert_matrix.cpp)
 vektoryum_apply_warnings(vektoryum_cli_convert_matrix_tests)
 
+add_executable(vektoryum_u8_real_user_production_tests tests/test_u8_real_user_production.cpp)
+vektoryum_apply_warnings(vektoryum_u8_real_user_production_tests)
+
 if(VEKTORYUM_ENABLE_SANITIZERS AND NOT MSVC)
     foreach(target
         vektoryum_tests
@@ -211,7 +214,8 @@ if(VEKTORYUM_ENABLE_SANITIZERS AND NOT MSVC)
         vektoryum_png_decode_tests
         vektoryum_tiff_decode_tests
         vektoryum_webp_decode_tests
-        vektoryum_cli_convert_matrix_tests)
+        vektoryum_cli_convert_matrix_tests
+        vektoryum_u8_real_user_production_tests)
         target_compile_options(${target} PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
         target_link_options(${target} PRIVATE -fsanitize=address,undefined)
     endforeach()
@@ -243,3 +247,4 @@ add_test(NAME vektoryum.png_decode COMMAND vektoryum_png_decode_tests)
 add_test(NAME vektoryum.tiff_decode COMMAND vektoryum_tiff_decode_tests)
 add_test(NAME vektoryum.webp_decode COMMAND vektoryum_webp_decode_tests)
 add_test(NAME vektoryum.cli_convert_matrix COMMAND vektoryum_cli_convert_matrix_tests $<TARGET_FILE:vektoryum_cli>)
+add_test(NAME vektoryum.u8_real_user_production COMMAND vektoryum_u8_real_user_production_tests $<TARGET_FILE:vektoryum_cli>)
