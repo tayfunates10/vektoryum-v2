@@ -305,6 +305,10 @@ int run_certified_convert(
         return static_cast<int>(vektoryum::api::ExitCode::Data);
     }
     auto painted_scene = upscale_reconstruction.scene;
+    if (!vektoryum::vector::attach_source_fill_rgb(painted_scene, decoded.image.rgba8, mask)) {
+        std::cerr << "error: source paint reconstruction rejected original raster\n";
+        return static_cast<int>(vektoryum::api::ExitCode::Data);
+    }
 
     std::vector<std::uint8_t> certification_mask(mask.size(), 0U);
     std::transform(
@@ -366,7 +370,8 @@ int run_certified_convert(
             decoded.image.spec.width,
             decoded.image.spec.height);
         if (!final_evidence.valid || final_evidence.output_sha256 != encoded.artifact.output_sha256 ||
-            !final_evidence.canonical_quality.ok()) {
+            !final_evidence.canonical_quality.ok() ||
+            !vektoryum::certification::passes_u8_production_gates(final_evidence)) {
             std::cerr << "error: final serialized output evidence failed acceptance gates\n";
             return static_cast<int>(vektoryum::api::ExitCode::Data);
         }

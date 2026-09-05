@@ -2,7 +2,7 @@
 
 Contract/infrastructure roadmap completion: **100%**
 
-Functional end-user product readiness: **post-R6 real-user corrective program active; U1-U6 complete, U7 implementation acceptance complete and README exact-head CI pending**.
+Functional end-user product readiness: **post-R6 real-user corrective program U1-U8 implementation acceptance complete; U8 README exact-head CI pending**.
 
 The Stage 0-13 contract roadmap and corrective R1-R6 implementation are complete, but a 2026-09-01 real-user audit proved that this still does **not** establish general-user raster-to-vector readiness. The measured audit exposed alpha/coverage semantic inconsistency, topology ambiguity on realistic contours, broken serialized SVG hole semantics, loss of source colors, certification that was not derived from the final serialized output, an upscale path that did not feed reconstruction, and cubic recovery that was not exercised by the real CLI path. These are tracked as a strict post-R6 U1-U8 corrective program. Existing quality thresholds, provenance, sanitizer behavior, API/CLI contracts and fail-closed acceptance gates remain immutable unless a later roadmap stage explicitly adds a stricter gate.
 
@@ -50,8 +50,8 @@ The post-roadmap visual audit exposed gaps that the contract-focused acceptance 
 | U4 | Preserve color regions/layers/fills and honor analyzer routing instead of forcing all inputs through binary vectorization | complete |
 | U5 | Derive final certification from independently rasterized serialized output with real alpha/color/component-hole/boundary/residual metrics | complete |
 | U6 | Feed the actual upscale result into reconstruction or fail the claimed upscale chain | complete |
-| U7 | Enable fidelity-gated cubic fitting on the real CLI production path | implementation complete; README exact-head CI pending |
-| U8 | Lock the eight real-user fixtures and production component/residual/boundary gates without weakening existing vector gates | pending |
+| U7 | Enable fidelity-gated cubic fitting on the real CLI production path | complete |
+| U8 | Lock the eight real-user fixtures and production component/residual/boundary gates without weakening existing vector gates | implementation complete; README exact-head CI pending |
 
 ## Verified post-R6 milestones
 
@@ -94,19 +94,29 @@ The post-roadmap visual audit exposed gaps that the contract-focused acceptance 
 ### U6 — complete
 
 - The certified CLI passes the actual `upscaled.image` into `reconstruct_from_upscaled_rgba()` instead of reconstructing geometry from the original-resolution source mask.
-- The reconstruction helper treats the upscale output as the sole geometry/paint authority and fails closed on invalid surface contracts.
+- The reconstruction helper treats the upscale output as the sole geometry authority and fails closed on invalid surface contracts.
 - Regression changes only the supplied upscale surface and requires reconstructed production geometry to change, proving the upscale result is behaviorally connected to reconstruction.
 - Existing vector fidelity gates remain `IoU >= 0.995` and disagreement ratio `<= 0.005`; no quality, provenance, sanitizer or API/CLI threshold was weakened.
 - U6 merged with expected-head protection from exact HEAD `453e40a614455e29091594e3c3656ac73a19a992`; merge commit `c599d3df8395e3305fcdd64b9c390b97dd7755af`.
 
-### U7 — implementation complete; README CI pending
+### U7 — complete
 
-- Production upscale reconstruction now invokes `recover_curves_certified()` instead of unconditional polygon-only fitting.
+- Production upscale reconstruction invokes `recover_curves_certified()` instead of unconditional polygon-only fitting.
 - Cubic candidates are accepted only through the existing `certify_svg_scene()` fidelity gate; candidate radius may decrease deterministically, but certification thresholds remain unchanged.
 - If no cubic candidate passes, the exact polygon remains authoritative, preserving fail-closed fidelity behavior.
 - The production CLI regression executes a real TIFF fixture through `--certified-convert ... svg`, requires emitted `<path>` geometry to contain a cubic `C` command, and requires the quality-certificate artifact to remain present.
-- The U7 regression is wired directly into `core-ci` and passed on Ubuntu, macOS and Windows in exact-head `core-ci #389` for implementation HEAD `84b072e99509853dd093303deecaa1bbf57e222e`; source hygiene and Linux ASan/UBSan also passed.
-- Existing vector fidelity gates remain `IoU >= 0.995` and disagreement ratio `<= 0.005`; provenance, sanitizer, API/CLI contracts and acceptance thresholds are unchanged. This README status commit must receive fresh exact-head green CI before U7 can merge.
+- U7 merged after exact-head green CI with expected-head protection; merge commit `25fa97604196a806d2fbfd2a1f3b4df935410074`.
+- Existing vector fidelity gates remain `IoU >= 0.995` and disagreement ratio `<= 0.005`; provenance, sanitizer, API/CLI contracts and acceptance thresholds are unchanged.
+
+### U8 — implementation complete; README CI pending
+
+- Final serialized SVG evidence now measures component IoU and exposes immutable production gates: component IoU `>= 0.95`, visible residual ratio `<= 0.01`, and boundary p95 `<= 0.75 px`.
+- The real `--certified-convert ... svg` production path enforces `passes_u8_production_gates()` fail-closed before certificate issuance.
+- Source-space paint is rebound from the decoded raster while geometry remains derived from the actual upscale reconstruction, preserving U6 geometry provenance and reducing interpolation-only paint residual.
+- The eight-fixture production regression pack executes eight representative user-style logo/mark cases through the real CLI, requires SVG and quality-certificate artifacts, and reruns each fixture to prove deterministic output.
+- The U8 regression is wired into CTest and Linux ASan/UBSan. Exact-head `core-ci #403` passed source hygiene, Ubuntu/macOS/Windows build-test, CLI contracts, packaged/smoke checks, and Linux sanitizers at implementation HEAD `c8863cb3dd24d27d35c9da5a1f6e8988d2d66138`.
+- Existing vector fidelity gates remain `IoU >= 0.995` and disagreement ratio `<= 0.005`; U8 did not weaken provenance, sanitizer behavior, API/CLI contracts or prior acceptance gates.
+- Blocking review thread count was zero before this README status update. This README commit must receive fresh exact-head green CI before U8 can merge.
 
 ## Verified corrective milestones R1-R6
 
@@ -153,9 +163,9 @@ These milestones remain prerequisites, not substitutes, for working visual conve
 
 ## Current corrective priority
 
-1. Obtain fresh exact-head green CI evidence for the U7 README status commit.
+1. Obtain fresh exact-head green CI evidence for this U8 README status commit.
 2. Re-verify `mergeable=true` and zero unresolved blocking review threads.
-3. Merge U7 only with expected-head protection after all U7 acceptance evidence remains green.
-4. Open U8 only after U7 is merged and then complete the eight-fixture production-quality gate pack without weakening existing gates.
+3. Merge U8 only with expected-head protection after all U8 acceptance evidence remains green.
+4. After canonical merged-state verification, the post-R6 U1-U8 corrective roadmap is complete and its monitoring automation can be disabled.
 
 UI, account and subscription work remains deferred until the post-R6 real-user corrective program reaches its required acceptance state.
