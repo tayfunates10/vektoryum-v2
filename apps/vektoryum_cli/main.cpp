@@ -39,6 +39,14 @@ int probe_raster_input(std::string_view path) {
         return static_cast<int>(vektoryum::api::ExitCode::Data);
     }
 
+    const auto decoded = vektoryum::io::decode_raster(loaded.input);
+    if (!decoded.ok()) {
+        std::cout << "schema_version=vektoryum.raster-input.v1\n"
+                  << "status=error\n"
+                  << "error=" << vektoryum::io::raster_decode_error_name(decoded.error) << '\n';
+        return static_cast<int>(vektoryum::api::ExitCode::Data);
+    }
+
     std::cout << "schema_version=vektoryum.raster-input.v1\n"
               << "status=accepted\n"
               << "format=" << vektoryum::io::raster_format_name(loaded.input.format) << '\n'
