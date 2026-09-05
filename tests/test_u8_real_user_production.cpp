@@ -227,7 +227,6 @@ int main(int argc, char** argv) {
     auto badge = make_canvas(width, height);
     fill_rect(badge, width, 6U, 6U, 26U, 26U, red);
     fill_rect(badge, width, 10U, 10U, 22U, 22U, {255U, 255U, 255U});
-    fill_rect(badge, width, 13U, 13U, 19U, 19U, red);
     run_fixture(cli, dir, "real_user_04_badge", width, height, badge);
 
     auto icon_cross = make_canvas(width, height);
