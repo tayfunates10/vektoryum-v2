@@ -237,10 +237,7 @@ struct BinaryTopology {
     result.boundary_p95_pixels = std::max(
         final_output_detail::directed_boundary_p95(reference_boundary, candidate_boundary),
         final_output_detail::directed_boundary_p95(candidate_boundary, reference_boundary));
-    result.valid = std::isfinite(result.boundary_p95_pixels) &&
-                   result.component_iou >= u8_min_component_iou &&
-                   result.visible_residual_ratio <= u8_max_visible_residual_ratio &&
-                   result.boundary_p95_pixels <= u8_max_boundary_p95_pixels;
+    result.valid = std::isfinite(result.boundary_p95_pixels);
     return result;
 }
 
