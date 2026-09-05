@@ -205,7 +205,7 @@ int main(int argc, char** argv) {
     constexpr std::uint32_t width = 32U;
     constexpr std::uint32_t height = 32U;
     constexpr std::array<std::uint8_t, 3U> black{0U, 0U, 0U};
-    constexpr std::array<std::uint8_t, 3U> red{180U, 20U, 20U};
+    constexpr std::array<std::uint8_t, 3U> red{120U, 12U, 12U};
     constexpr std::array<std::uint8_t, 3U> blue{20U, 40U, 160U};
 
     auto logo_block = make_canvas(width, height);
