@@ -17,6 +17,10 @@
 
 namespace vektoryum::certification {
 
+inline constexpr double u8_min_component_iou{0.95};
+inline constexpr double u8_max_visible_residual_ratio{0.01};
+inline constexpr double u8_max_boundary_p95_pixels{0.75};
+
 struct FinalOutputEvidence {
     bool valid{false};
     std::string output_sha256;
@@ -26,6 +30,7 @@ struct FinalOutputEvidence {
     std::uint64_t candidate_components{0U};
     std::uint64_t reference_holes{0U};
     std::uint64_t candidate_holes{0U};
+    double component_iou{0.0};
     double boundary_p95_pixels{std::numeric_limits<double>::infinity()};
     double visible_residual_ratio{1.0};
 };
@@ -223,6 +228,9 @@ struct BinaryTopology {
     result.candidate_components = candidate_topology.components;
     result.reference_holes = reference_topology.holes;
     result.candidate_holes = candidate_topology.holes;
+    result.component_iou = reference_topology.components == candidate_topology.components
+        ? vektoryum::vector::binary_iou(reference_vector_mask, candidate_mask)
+        : 0.0;
 
     const auto reference_boundary = final_output_detail::boundary_points(reference_vector_mask, width, height);
     const auto candidate_boundary = final_output_detail::boundary_points(candidate_mask, width, height);
@@ -231,6 +239,13 @@ struct BinaryTopology {
         final_output_detail::directed_boundary_p95(candidate_boundary, reference_boundary));
     result.valid = std::isfinite(result.boundary_p95_pixels);
     return result;
+}
+
+[[nodiscard]] inline bool passes_u8_production_gates(const FinalOutputEvidence& evidence) noexcept {
+    return evidence.valid &&
+           evidence.component_iou >= u8_min_component_iou &&
+           evidence.visible_residual_ratio <= u8_max_visible_residual_ratio &&
+           evidence.boundary_p95_pixels <= u8_max_boundary_p95_pixels;
 }
 
 }  // namespace vektoryum::certification

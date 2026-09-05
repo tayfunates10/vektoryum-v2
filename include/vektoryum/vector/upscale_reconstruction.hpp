@@ -151,8 +151,22 @@ namespace detail {
     result.curve_certification = recovered.certification;
 
     if (!attach_source_fill_rgb(result.scene, result.rgba8, result.coverage)) {
-        result.scene = {};
-        return result;
+        // Interpolation can create many tiny source-color buckets even when the
+        // certified geometry is exact. Preserve the upscale-derived geometry
+        // and fail closed unless a deterministic upscale-derived dominant fill
+        // can still be established. The production CLI subsequently rebinds
+        // source-space paint and independently certifies the final SVG bytes.
+        const auto fallback_fill = derive_source_fill_rgb(result.rgba8, result.coverage);
+        if (!fallback_fill.valid || result.scene.paths.empty()) {
+            result.scene = {};
+            return result;
+        }
+        result.scene.fill_rgb = fallback_fill.rgb;
+        result.scene.paint_layers.clear();
+        SvgPaintLayer layer{};
+        layer.paths = result.scene.paths;
+        layer.fill_rgb = fallback_fill.rgb;
+        result.scene.paint_layers.push_back(layer);
     }
     result.valid = true;
     return result;
