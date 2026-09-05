@@ -6,6 +6,7 @@
 
 #include "vektoryum/vector/curve_recovery.hpp"
 #include "vektoryum/vector/svg_path.hpp"
+#include "vektoryum/vector/upscale_reconstruction.hpp"
 
 namespace {
 int failures = 0;
@@ -27,6 +28,24 @@ void fill_rectangle(std::vector<std::uint8_t>& pixels, std::uint32_t width,
             pixels[static_cast<std::size_t>(y) * width + x] = value;
         }
     }
+}
+
+vektoryum::resample::FloatImage make_upscale_fixture(
+    std::uint32_t x0,
+    std::uint32_t x1) {
+    vektoryum::resample::FloatImage image{};
+    image.width = 8U;
+    image.height = 8U;
+    image.channels = 4U;
+    image.pixels.assign(8U * 8U * 4U, 0.0F);
+    for (std::uint32_t y = 2U; y < 6U; ++y) {
+        for (std::uint32_t x = x0; x < x1; ++x) {
+            const auto base = (static_cast<std::size_t>(y) * image.width + x) * 4U;
+            image.pixels[base] = 1.0F;
+            image.pixels[base + 3U] = 1.0F;
+        }
+    }
+    return image;
 }
 }
 
@@ -161,6 +180,39 @@ int run_svg_path_tests() {
                     !exact_only_recovery.reduced_nodes() &&
                     exact_only_recovery.certification.raster_iou == 1.0,
                 "failed curve candidate falls back to exact polygon without weakening gates");
+
+    const auto upscale_left = make_upscale_fixture(1U, 4U);
+    const auto upscale_right = make_upscale_fixture(4U, 7U);
+    const auto reconstructed_left = reconstruct_from_upscaled_rgba(
+        upscale_left, true, 4U, 4U);
+    const auto reconstructed_right = reconstruct_from_upscaled_rgba(
+        upscale_right, true, 4U, 4U);
+    expect_true(reconstructed_left.valid && reconstructed_right.valid,
+                "U6 reconstruction accepts actual upscale surfaces");
+    expect_true(reconstructed_left.coverage.size() == 16U &&
+                    reconstructed_right.coverage.size() == 16U,
+                "U6 reconstruction derives source-grid coverage from upscale output");
+    expect_true(!reconstructed_left.scene.paths.empty() &&
+                    !reconstructed_right.scene.paths.empty() &&
+                    serialize_svg_path_data(reconstructed_left.scene.paths.front()) !=
+                        serialize_svg_path_data(reconstructed_right.scene.paths.front()),
+                "changing only upscale output changes reconstructed production geometry");
+
+    std::vector<std::uint8_t> upscale_reference(16U, 0U);
+    for (std::size_t index = 0U; index < reconstructed_left.coverage.size(); ++index) {
+        upscale_reference[index] = static_cast<std::uint8_t>(
+            coverage_is_foreground(reconstructed_left.coverage[index]));
+    }
+    const auto upscale_quality = certify_svg_scene(
+        reconstructed_left.scene, upscale_reference, 4U, 4U);
+    expect_true(upscale_quality.passed() && upscale_quality.raster_iou >= 0.995 &&
+                    upscale_quality.disagreement_ratio <= 0.005,
+                "U6 upscale-derived reconstruction preserves committed fidelity gates");
+
+    auto invalid_upscale = upscale_left;
+    invalid_upscale.channels = 3U;
+    expect_true(!reconstruct_from_upscaled_rgba(invalid_upscale, true, 4U, 4U).valid,
+                "U6 upscale reconstruction fails closed on invalid surface contract");
 
     return failures;
 }
