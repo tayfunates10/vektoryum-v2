@@ -62,6 +62,9 @@ jobs:
       - name: CLI contract test
         run: cmake -DBUILD_DIR=build -P tests/cli_contract.cmake
 
+      - name: Probe rejection regression
+        run: cmake -DBUILD_DIR=build -P tests/probe_rejection_contract.cmake
+
       - name: Stage release CLI (Unix)
         if: runner.os != 'Windows'
         run: |
@@ -115,3 +118,9 @@ jobs:
           ASAN_OPTIONS: detect_leaks=1:halt_on_error=1
           UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
         run: cmake -DBUILD_DIR=build-sanitize -P tests/cli_contract.cmake
+
+      - name: Probe rejection regression under sanitizers
+        env:
+          ASAN_OPTIONS: detect_leaks=1:halt_on_error=1
+          UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
+        run: cmake -DBUILD_DIR=build-sanitize -P tests/probe_rejection_contract.cmake
