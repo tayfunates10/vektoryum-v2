@@ -72,8 +72,6 @@ void check_fixture(
     }
 }
 
-// A hand-built uncompressed TIFF, so the test can vary the parts a reference
-// encoder does not expose: byte order, strip layout and the tags it omits.
 struct TiffPlan {
     bool big_endian{false};
     std::uint32_t width{4U};
@@ -82,10 +80,10 @@ struct TiffPlan {
     std::uint16_t photometric{2U};
     std::uint32_t rows_per_strip{4U};
     bool emit_samples_per_pixel{true};
-    std::uint16_t extra_sample{0U};   // 0 omits the tag, 1 associated, 2 unassociated
+    std::uint16_t extra_sample{0U};
     std::uint16_t compression{1U};
     std::uint16_t bits_per_sample{8U};
-    std::uint32_t declared_strip_bytes{0U};   // 0 uses the correct value
+    std::uint32_t declared_strip_bytes{0U};
 };
 
 class TiffBuilder {
@@ -120,8 +118,6 @@ private:
     bool big_endian_;
 };
 
-// Samples are generated the same way the expectation is, so the fixture and the
-// expected pixels cannot drift apart.
 [[nodiscard]] std::uint8_t plan_sample(std::uint32_t x, std::uint32_t y, std::uint32_t channel) noexcept {
     return byte_of(x * 17U + y * 29U + channel * 53U + 7U);
 }
@@ -134,7 +130,7 @@ private:
 
     struct Entry {
         std::uint16_t tag;
-        std::uint16_t type;   // 3 = SHORT, 4 = LONG
+        std::uint16_t type;
         std::uint32_t count;
         std::vector<std::uint32_t> values;
     };
@@ -166,7 +162,6 @@ private:
 
     const std::size_t ifd_size = 2U + entries.size() * 12U + 4U;
     std::size_t out_of_line = 8U + ifd_size;
-    // Reserve the out-of-line area for the values that do not fit inline.
     for (Entry& entry : entries) {
         const std::size_t element = entry.type == 3U ? 2U : 4U;
         const std::size_t total = element * entry.count;
@@ -263,6 +258,10 @@ void check_plan(std::string_view name, const TiffPlan& plan) {
             const std::uint8_t v = plan_sample(x, y, 0U);
             return std::array<std::uint8_t, 4U>{v, v, v, 255U};
         }
+        if (plan.photometric == 1U && plan.samples == 2U && plan.extra_sample == 2U) {
+            const std::uint8_t v = plan_sample(x, y, 0U);
+            return std::array<std::uint8_t, 4U>{v, v, v, plan_sample(x, y, 1U)};
+        }
         return std::array<std::uint8_t, 4U>{
             plan_sample(x, y, 0U), plan_sample(x, y, 1U), plan_sample(x, y, 2U),
             plan.samples == 4U ? plan_sample(x, y, 3U) : static_cast<std::uint8_t>(255U)};
@@ -299,8 +298,6 @@ int main() {
             byte_of(x * 9U), byte_of(y * 13U), byte_of((x + y) * 5U), byte_of((x * 255U) / 12U)};
     });
 
-    // Both byte orders, every supported photometric layout, and strip layouts a
-    // reference encoder will not produce on demand.
     for (const bool big_endian : {false, true}) {
         const std::string order = big_endian ? "big-endian " : "little-endian ";
         TiffPlan gray{};
@@ -315,6 +312,11 @@ int main() {
         TiffPlan gray_default_tag = gray;
         gray_default_tag.emit_samples_per_pixel = false;
         check_plan(order + "greyscale without SamplesPerPixel", gray_default_tag);
+
+        TiffPlan gray_alpha = gray;
+        gray_alpha.samples = 2U;
+        gray_alpha.extra_sample = 2U;
+        check_plan(order + "greyscale with unassociated alpha", gray_alpha);
 
         TiffPlan rgb{};
         rgb.big_endian = big_endian;
@@ -331,7 +333,7 @@ int main() {
 
         TiffPlan striped = rgb;
         striped.height = 9U;
-        striped.rows_per_strip = 2U;   // five strips, the last one short
+        striped.rows_per_strip = 2U;
         check_plan(order + "RGB in five strips", striped);
 
         TiffPlan single_row_strips = rgba;
@@ -340,7 +342,6 @@ int main() {
         check_plan(order + "RGBA in one strip per row", single_row_strips);
     }
 
-    // Associated alpha is un-premultiplied on the way to canonical straight alpha.
     {
         TiffPlan associated{};
         associated.width = 5U;
@@ -361,7 +362,32 @@ int main() {
         }
     }
 
-    // Structural faults must fail closed rather than reading past a strip.
+    {
+        TiffPlan associated_gray{};
+        associated_gray.width = 5U;
+        associated_gray.height = 4U;
+        associated_gray.samples = 2U;
+        associated_gray.photometric = 1U;
+        associated_gray.extra_sample = 1U;
+        associated_gray.rows_per_strip = 4U;
+        const auto bytes = build_tiff(associated_gray);
+        const auto decoded = vektoryum::io::decode_raster(vektoryum::io::RasterFormat::Tiff, bytes);
+        expect(decoded.ok(), "associated grayscale-alpha TIFF must decode");
+        if (decoded.ok()) {
+            const std::uint8_t alpha = plan_sample(0U, 0U, 1U);
+            const std::uint8_t source_gray = plan_sample(0U, 0U, 0U);
+            expect(decoded.image.rgba8[3U] == alpha,
+                   "associated grayscale-alpha TIFF must preserve alpha");
+            expect(decoded.image.rgba8[0U] == decoded.image.rgba8[1U] &&
+                       decoded.image.rgba8[1U] == decoded.image.rgba8[2U],
+                   "grayscale-alpha TIFF must replicate gray into canonical RGB");
+            expect(decoded.image.rgba8[0U] >= source_gray,
+                   "associated grayscale-alpha TIFF must un-premultiply gray");
+            expect(decoded.image.spec.alpha == vektoryum::core::AlphaMode::Straight,
+                   "associated grayscale alpha must normalize to straight alpha");
+        }
+    }
+
     {
         TiffPlan wrong_counts{};
         wrong_counts.width = 5U;
@@ -374,7 +400,7 @@ int main() {
         compressed.width = 5U;
         compressed.height = 4U;
         compressed.rows_per_strip = 4U;
-        compressed.compression = 5U;   // LZW
+        compressed.compression = 5U;
         check_plan_rejected("compressed TIFF", compressed);
 
         TiffPlan deep{};
@@ -388,7 +414,7 @@ int main() {
         bad_photometric.width = 5U;
         bad_photometric.height = 4U;
         bad_photometric.rows_per_strip = 4U;
-        bad_photometric.photometric = 5U;   // separated (CMYK)
+        bad_photometric.photometric = 5U;
         check_plan_rejected("CMYK TIFF", bad_photometric);
 
         TiffPlan unknown_extra{};
@@ -398,6 +424,14 @@ int main() {
         unknown_extra.rows_per_strip = 4U;
         unknown_extra.extra_sample = 3U;
         check_plan_rejected("TIFF with an unknown ExtraSamples value", unknown_extra);
+
+        TiffPlan gray_alpha_missing_extra{};
+        gray_alpha_missing_extra.width = 5U;
+        gray_alpha_missing_extra.height = 4U;
+        gray_alpha_missing_extra.samples = 2U;
+        gray_alpha_missing_extra.photometric = 1U;
+        gray_alpha_missing_extra.rows_per_strip = 4U;
+        check_plan_rejected("grayscale-alpha TIFF without ExtraSamples", gray_alpha_missing_extra);
     }
     {
         TiffPlan plan{};

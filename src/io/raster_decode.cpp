@@ -254,9 +254,18 @@ struct IfdEntry {
     }
 
     bool grayscale = false;
+    bool grayscale_alpha = false;
     bool associated_alpha = false;
     if (*photometric == 1U && samples == 1U) {
         grayscale = true;
+    } else if (*photometric == 1U && samples == 2U) {
+        const auto extras = values_for_tag(bytes, entries, 338U, order);
+        if (!extras.has_value() || extras->size() != 1U || ((*extras)[0U] != 1U && (*extras)[0U] != 2U)) {
+            return fail(RasterDecodeError::UnsupportedFeature);
+        }
+        grayscale = true;
+        grayscale_alpha = true;
+        associated_alpha = (*extras)[0U] == 1U;
     } else if (*photometric == 2U && samples == 3U) {
         grayscale = false;
     } else if (*photometric == 2U && samples == 4U) {
@@ -319,11 +328,15 @@ struct IfdEntry {
                                    row_in_strip * row_bytes + (i - row * width_size) * sample_count;
         const std::size_t target = i * 4U;
         if (grayscale) {
-            const std::uint8_t value = bytes[source];
+            std::uint8_t value = bytes[source];
+            const std::uint8_t alpha = grayscale_alpha ? bytes[source + 1U] : 255U;
+            if (grayscale_alpha && associated_alpha) {
+                value = unpremultiply(value, alpha);
+            }
             decoded.rgba8[target] = value;
             decoded.rgba8[target + 1U] = value;
             decoded.rgba8[target + 2U] = value;
-            decoded.rgba8[target + 3U] = 255U;
+            decoded.rgba8[target + 3U] = alpha;
         } else {
             std::uint8_t red = bytes[source];
             std::uint8_t green = bytes[source + 1U];
