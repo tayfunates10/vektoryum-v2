@@ -23,13 +23,12 @@ constexpr std::array<std::uint8_t, 64U> zigzag_to_natural{
     12U, 19U, 26U, 33U, 40U, 48U, 41U, 34U,
     27U, 20U, 13U, 6U, 7U, 14U, 21U, 28U,
     35U, 42U, 49U, 56U, 57U, 50U, 43U, 36U,
-    29U, 22U, 15U, 23U, 30U, 37U, 44U, 51U,
+    29U, 22U, 13U, 23U, 30U, 37U, 44U, 51U,
     58U, 59U, 52U, 45U, 38U, 31U, 39U, 46U,
     53U, 60U, 61U, 54U, 47U, 55U, 62U, 63U,
 };
 
 constexpr std::size_t jpeg_max_pixels = 16U * 1024U * 1024U;
-// JPEG caps the number of 8x8 blocks in one minimum coded unit at ten.
 constexpr std::size_t jpeg_max_blocks_per_mcu = 10U;
 
 struct HuffmanTable {
@@ -59,6 +58,14 @@ struct Frame {
     std::uint16_t width{};
     std::uint16_t height{};
     std::array<Component, 3U> components{};
+};
+
+struct ComponentPlane {
+    std::size_t width{};
+    std::size_t height{};
+    std::size_t logical_width{};
+    std::size_t logical_height{};
+    std::vector<std::uint8_t> samples{};
 };
 
 [[nodiscard]] RasterDecodeResult fail(RasterDecodeError error) noexcept {
@@ -363,6 +370,37 @@ private:
     return static_cast<std::uint8_t>(std::clamp(std::lround(value), 0L, 255L));
 }
 
+[[nodiscard]] double sample_component(
+    const ComponentPlane& plane,
+    std::size_t x,
+    std::size_t y,
+    std::uint8_t h,
+    std::uint8_t v,
+    std::uint8_t max_h,
+    std::uint8_t max_v) noexcept {
+    if (h == max_h && v == max_v) {
+        return static_cast<double>(plane.samples[y * plane.width + x]);
+    }
+
+    const double source_x =
+        (static_cast<double>(x) + 0.5) * static_cast<double>(h) / static_cast<double>(max_h) - 0.5;
+    const double source_y =
+        (static_cast<double>(y) + 0.5) * static_cast<double>(v) / static_cast<double>(max_v) - 0.5;
+    const double clamped_x = std::clamp(source_x, 0.0, static_cast<double>(plane.logical_width - 1U));
+    const double clamped_y = std::clamp(source_y, 0.0, static_cast<double>(plane.logical_height - 1U));
+    const std::size_t x0 = static_cast<std::size_t>(std::floor(clamped_x));
+    const std::size_t y0 = static_cast<std::size_t>(std::floor(clamped_y));
+    const std::size_t x1 = std::min(x0 + 1U, plane.logical_width - 1U);
+    const std::size_t y1 = std::min(y0 + 1U, plane.logical_height - 1U);
+    const double wx = clamped_x - static_cast<double>(x0);
+    const double wy = clamped_y - static_cast<double>(y0);
+    const double top = (1.0 - wx) * static_cast<double>(plane.samples[y0 * plane.width + x0]) +
+                       wx * static_cast<double>(plane.samples[y0 * plane.width + x1]);
+    const double bottom = (1.0 - wx) * static_cast<double>(plane.samples[y1 * plane.width + x0]) +
+                          wx * static_cast<double>(plane.samples[y1 * plane.width + x1]);
+    return (1.0 - wy) * top + wy * bottom;
+}
+
 [[nodiscard]] RasterDecodeResult decode_color_scan(
     std::span<const std::uint8_t> bytes,
     std::size_t entropy_offset,
@@ -382,10 +420,6 @@ private:
     const std::uint8_t max_h = std::max({frame.components[0U].h, frame.components[1U].h, frame.components[2U].h});
     const std::uint8_t max_v = std::max({frame.components[0U].v, frame.components[1U].v, frame.components[2U].v});
 
-    // The MCU walk below derives every block position from the per-component
-    // sampling factors, so it covers 4:4:4, 4:2:2, 4:4:0 and 4:2:0 alike. The
-    // frame header already limits each factor to 1 or 2; the standard also caps
-    // the blocks in one MCU at ten.
     std::size_t blocks_per_mcu = 0U;
     for (const Component& component : frame.components) {
         blocks_per_mcu += static_cast<std::size_t>(component.h) * component.v;
@@ -422,53 +456,48 @@ private:
     const std::size_t mcus_x = (width + mcu_width - 1U) / mcu_width;
     const std::size_t mcus_y = (height + mcu_height - 1U) / mcu_height;
 
+    std::array<ComponentPlane, 3U> planes{};
+    for (std::size_t component_index = 0U; component_index < frame.components.size(); ++component_index) {
+        const Component& component = frame.components[component_index];
+        ComponentPlane& plane = planes[component_index];
+        plane.width = mcus_x * static_cast<std::size_t>(component.h) * 8U;
+        plane.height = mcus_y * static_cast<std::size_t>(component.v) * 8U;
+        plane.logical_width =
+            (width * static_cast<std::size_t>(component.h) + static_cast<std::size_t>(max_h) - 1U) / max_h;
+        plane.logical_height =
+            (height * static_cast<std::size_t>(component.v) + static_cast<std::size_t>(max_v) - 1U) / max_v;
+        if (plane.width == 0U || plane.height == 0U ||
+            plane.width > std::numeric_limits<std::size_t>::max() / plane.height) {
+            return fail(RasterDecodeError::PixelBudgetExceeded);
+        }
+        plane.samples.resize(plane.width * plane.height);
+    }
+
     for (std::size_t mcu_y = 0U; mcu_y < mcus_y; ++mcu_y) {
         for (std::size_t mcu_x = 0U; mcu_x < mcus_x; ++mcu_x) {
-            std::array<std::array<std::array<std::uint8_t, 64U>, 4U>, 3U> blocks{};
             for (std::size_t component_index = 0U; component_index < 3U; ++component_index) {
                 const Component& component = frame.components[component_index];
-                const std::size_t block_count = static_cast<std::size_t>(component.h) * component.v;
-                for (std::size_t block_index = 0U; block_index < block_count; ++block_index) {
-                    const auto block = decode_block(reader, previous_dc[component_index],
-                                                    quant_tables[component.quant],
-                                                    dc_tables[component.dc], ac_tables[component.ac]);
-                    if (!block.has_value()) {
-                        return fail(RasterDecodeError::TruncatedPixelData);
+                ComponentPlane& plane = planes[component_index];
+                for (std::size_t block_y = 0U; block_y < component.v; ++block_y) {
+                    for (std::size_t block_x = 0U; block_x < component.h; ++block_x) {
+                        const auto block = decode_block(reader, previous_dc[component_index],
+                                                        quant_tables[component.quant],
+                                                        dc_tables[component.dc], ac_tables[component.ac]);
+                        if (!block.has_value()) {
+                            return fail(RasterDecodeError::TruncatedPixelData);
+                        }
+                        const std::size_t target_x =
+                            (mcu_x * static_cast<std::size_t>(component.h) + block_x) * 8U;
+                        const std::size_t target_y =
+                            (mcu_y * static_cast<std::size_t>(component.v) + block_y) * 8U;
+                        for (std::size_t row = 0U; row < 8U; ++row) {
+                            const auto source_begin = block->begin() + static_cast<std::ptrdiff_t>(row * 8U);
+                            const auto source_end = source_begin + 8;
+                            auto target_begin = plane.samples.begin() +
+                                                static_cast<std::ptrdiff_t>((target_y + row) * plane.width + target_x);
+                            std::copy(source_begin, source_end, target_begin);
+                        }
                     }
-                    blocks[component_index][block_index] = *block;
-                }
-            }
-
-            for (std::size_t local_y = 0U; local_y < mcu_height; ++local_y) {
-                const std::size_t y = mcu_y * mcu_height + local_y;
-                if (y >= height) {
-                    break;
-                }
-                for (std::size_t local_x = 0U; local_x < mcu_width; ++local_x) {
-                    const std::size_t x = mcu_x * mcu_width + local_x;
-                    if (x >= width) {
-                        break;
-                    }
-
-                    std::array<std::uint8_t, 3U> sample{};
-                    for (std::size_t component_index = 0U; component_index < 3U; ++component_index) {
-                        const Component& component = frame.components[component_index];
-                        const std::size_t sample_x = local_x * component.h / max_h;
-                        const std::size_t sample_y = local_y * component.v / max_v;
-                        const std::size_t block_x = sample_x / 8U;
-                        const std::size_t block_y = sample_y / 8U;
-                        const std::size_t block_index = block_y * component.h + block_x;
-                        sample[component_index] = blocks[component_index][block_index][(sample_y % 8U) * 8U + (sample_x % 8U)];
-                    }
-
-                    const double y_value = static_cast<double>(sample[0U]);
-                    const double cb = static_cast<double>(sample[1U]) - 128.0;
-                    const double cr = static_cast<double>(sample[2U]) - 128.0;
-                    const std::size_t target = (y * width + x) * 4U;
-                    decoded.rgba8[target] = clamp_channel(y_value + 1.402 * cr);
-                    decoded.rgba8[target + 1U] = clamp_channel(y_value - 0.344136 * cb - 0.714136 * cr);
-                    decoded.rgba8[target + 2U] = clamp_channel(y_value + 1.772 * cb);
-                    decoded.rgba8[target + 3U] = 255U;
                 }
             }
         }
@@ -477,6 +506,25 @@ private:
     if (!reader.at_eoi()) {
         return fail(RasterDecodeError::MalformedContainer);
     }
+
+    for (std::size_t y = 0U; y < height; ++y) {
+        for (std::size_t x = 0U; x < width; ++x) {
+            const double y_value = sample_component(
+                planes[0U], x, y, frame.components[0U].h, frame.components[0U].v, max_h, max_v);
+            const double cb = sample_component(
+                                  planes[1U], x, y, frame.components[1U].h, frame.components[1U].v, max_h, max_v) -
+                              128.0;
+            const double cr = sample_component(
+                                  planes[2U], x, y, frame.components[2U].h, frame.components[2U].v, max_h, max_v) -
+                              128.0;
+            const std::size_t target = (y * width + x) * 4U;
+            decoded.rgba8[target] = clamp_channel(y_value + 1.402 * cr);
+            decoded.rgba8[target + 1U] = clamp_channel(y_value - 0.344136 * cb - 0.714136 * cr);
+            decoded.rgba8[target + 2U] = clamp_channel(y_value + 1.772 * cb);
+            decoded.rgba8[target + 3U] = 255U;
+        }
+    }
+
     return {RasterDecodeError::None, std::move(decoded)};
 }
 
