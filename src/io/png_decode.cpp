@@ -146,9 +146,10 @@ private:
 };
 
 struct DeflateHuffman {
-    std::array<std::uint16_t, 288U> reversed_codes{};
-    std::array<std::uint8_t, 288U> lengths{};
-    std::size_t symbol_count{};
+    std::array<std::uint16_t, 16U> count{};
+    std::array<std::uint16_t, 16U> first_code{};
+    std::array<std::uint16_t, 16U> first_symbol{};
+    std::array<std::uint16_t, 288U> symbols{};
     unsigned max_bits{};
 };
 
@@ -163,18 +164,16 @@ struct DeflateHuffman {
 }
 
 [[nodiscard]] bool build_huffman(std::span<const std::uint8_t> lengths, DeflateHuffman& table) noexcept {
-    if (lengths.empty() || lengths.size() > table.lengths.size()) {
+    if (lengths.empty() || lengths.size() > table.symbols.size()) {
         return false;
     }
     table = {};
-    std::array<std::uint16_t, 16U> count{};
-    std::array<std::uint16_t, 16U> next_code{};
     for (const std::uint8_t length : lengths) {
         if (length > 15U) {
             return false;
         }
         if (length != 0U) {
-            ++count[length];
+            ++table.count[length];
             table.max_bits = std::max(table.max_bits, static_cast<unsigned>(length));
         }
     }
@@ -183,22 +182,23 @@ struct DeflateHuffman {
     }
 
     std::uint32_t code = 0U;
+    std::uint16_t symbol_offset = 0U;
     for (unsigned bits = 1U; bits <= 15U; ++bits) {
-        code = (code + static_cast<std::uint32_t>(count[bits - 1U])) << 1U;
+        code = (code + static_cast<std::uint32_t>(table.count[bits - 1U])) << 1U;
         const std::uint32_t limit = 1U << bits;
-        if (code + static_cast<std::uint32_t>(count[bits]) > limit) {
+        if (code + static_cast<std::uint32_t>(table.count[bits]) > limit) {
             return false;
         }
-        next_code[bits] = static_cast<std::uint16_t>(code);
+        table.first_code[bits] = static_cast<std::uint16_t>(code);
+        table.first_symbol[bits] = symbol_offset;
+        symbol_offset = static_cast<std::uint16_t>(symbol_offset + table.count[bits]);
     }
 
-    table.symbol_count = lengths.size();
+    std::array<std::uint16_t, 16U> next_symbol = table.first_symbol;
     for (std::size_t symbol = 0U; symbol < lengths.size(); ++symbol) {
         const std::uint8_t length = lengths[symbol];
-        table.lengths[symbol] = length;
         if (length != 0U) {
-            const std::uint16_t canonical = next_code[length]++;
-            table.reversed_codes[symbol] = reverse_bits(canonical, static_cast<unsigned>(length));
+            table.symbols[next_symbol[length]++] = static_cast<std::uint16_t>(symbol);
         }
     }
     return true;
@@ -208,18 +208,25 @@ struct DeflateHuffman {
     DeflateBitReader& reader,
     const DeflateHuffman& table,
     std::uint16_t& symbol) noexcept {
-    std::uint32_t code = 0U;
+    std::uint32_t reversed_code = 0U;
     for (unsigned length = 1U; length <= table.max_bits; ++length) {
         std::uint32_t bit = 0U;
         if (!reader.read_bits(1U, bit)) {
             return false;
         }
-        code |= bit << (length - 1U);
-        for (std::size_t candidate = 0U; candidate < table.symbol_count; ++candidate) {
-            if (table.lengths[candidate] == length && table.reversed_codes[candidate] == code) {
-                symbol = static_cast<std::uint16_t>(candidate);
-                return true;
+        reversed_code |= bit << (length - 1U);
+        const std::uint16_t canonical =
+            reverse_bits(static_cast<std::uint16_t>(reversed_code), length);
+        const std::uint32_t first = table.first_code[length];
+        const std::uint32_t count = table.count[length];
+        if (canonical >= first && static_cast<std::uint32_t>(canonical) < first + count) {
+            const std::size_t index = static_cast<std::size_t>(table.first_symbol[length]) +
+                                      static_cast<std::size_t>(canonical - first);
+            if (index >= table.symbols.size()) {
+                return false;
             }
+            symbol = table.symbols[index];
+            return true;
         }
     }
     return false;
@@ -520,31 +527,29 @@ struct DeflateHuffman {
     return c;
 }
 
-[[nodiscard]] bool unfilter_rows(
-    std::span<const std::uint8_t> filtered,
+[[nodiscard]] bool unfilter_rows_in_place(
+    std::vector<std::uint8_t>& pixels,
     std::size_t width,
     std::size_t height,
-    std::size_t bytes_per_pixel,
-    std::vector<std::uint8_t>& pixels) {
+    std::size_t bytes_per_pixel) {
     const std::size_t row_bytes = width * bytes_per_pixel;
     if (row_bytes > std::numeric_limits<std::size_t>::max() - 1U) {
         return false;
     }
     const std::size_t stride = row_bytes + 1U;
-    if (height > std::numeric_limits<std::size_t>::max() / stride || filtered.size() != height * stride) {
+    if (height > std::numeric_limits<std::size_t>::max() / stride || pixels.size() != height * stride) {
         return false;
     }
-    pixels.assign(height * row_bytes, 0U);
 
     for (std::size_t y = 0U; y < height; ++y) {
         const std::size_t source_row = y * stride;
         const std::size_t target_row = y * row_bytes;
-        const std::uint8_t filter = filtered[source_row];
+        const std::uint8_t filter = pixels[source_row];
         if (filter > 4U) {
             return false;
         }
         for (std::size_t x = 0U; x < row_bytes; ++x) {
-            const std::uint8_t raw = filtered[source_row + 1U + x];
+            const std::uint8_t raw = pixels[source_row + 1U + x];
             const std::uint8_t left = x >= bytes_per_pixel ? pixels[target_row + x - bytes_per_pixel] : 0U;
             const std::uint8_t up = y != 0U ? pixels[target_row - row_bytes + x] : 0U;
             const std::uint8_t up_left = y != 0U && x >= bytes_per_pixel
@@ -566,6 +571,7 @@ struct DeflateHuffman {
             pixels[target_row + x] = reconstructed;
         }
     }
+    pixels.resize(height * row_bytes);
     return true;
 }
 
@@ -793,19 +799,18 @@ RasterDecodeResult decode_png(std::span<const std::uint8_t> bytes) {
         return {RasterDecodeError::PixelBudgetExceeded, {}};
     }
     const std::size_t filtered_size = height_size * (row_bytes + 1U);
-    const InflateResult inflated = inflate_zlib(idat, filtered_size);
+    InflateResult inflated = inflate_zlib(idat, filtered_size);
     if (inflated.error != RasterDecodeError::None) {
         return {inflated.error, {}};
     }
     if (inflated.bytes.size() != filtered_size) {
         return {RasterDecodeError::TruncatedPixelData, {}};
     }
-
-    std::vector<std::uint8_t> pixels;
-    if (!unfilter_rows(inflated.bytes, width_size, height_size, bytes_per_pixel, pixels)) {
+    if (!unfilter_rows_in_place(inflated.bytes, width_size, height_size, bytes_per_pixel)) {
         return {RasterDecodeError::MalformedContainer, {}};
     }
 
+    const std::vector<std::uint8_t>& pixels = inflated.bytes;
     const std::size_t pixel_count = width_size * height_size;
     DecodedRaster decoded{};
     decoded.spec.width = width;
