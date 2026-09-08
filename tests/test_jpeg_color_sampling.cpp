@@ -194,7 +194,9 @@ class EntropyWriter {
 public:
     void write_bits(std::uint32_t value, unsigned count) {
         for (unsigned bit = count; bit > 0U; --bit) {
-            current_ = static_cast<std::uint8_t>((current_ << 1U) | ((value >> (bit - 1U)) & 1U));
+            const std::uint32_t shifted = static_cast<std::uint32_t>(current_) << 1U;
+            const std::uint32_t next = (value >> (bit - 1U)) & 1U;
+            current_ = static_cast<std::uint8_t>(shifted | next);
             ++used_;
             if (used_ == 8U) {
                 emit(current_);
@@ -207,7 +209,9 @@ public:
     [[nodiscard]] std::vector<std::uint8_t> finish() {
         if (used_ != 0U) {
             const unsigned padding = 8U - used_;
-            current_ = static_cast<std::uint8_t>((current_ << padding) | ((1U << padding) - 1U));
+            const std::uint32_t shifted = static_cast<std::uint32_t>(current_) << padding;
+            const std::uint32_t fill = (1U << padding) - 1U;
+            current_ = static_cast<std::uint8_t>(shifted | fill);
             emit(current_);
             current_ = 0U;
             used_ = 0U;
