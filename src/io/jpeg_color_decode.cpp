@@ -23,12 +23,13 @@ constexpr std::array<std::uint8_t, 64U> zigzag_to_natural{
     12U, 19U, 26U, 33U, 40U, 48U, 41U, 34U,
     27U, 20U, 13U, 6U, 7U, 14U, 21U, 28U,
     35U, 42U, 49U, 56U, 57U, 50U, 43U, 36U,
-    29U, 22U, 13U, 23U, 30U, 37U, 44U, 51U,
+    29U, 22U, 15U, 23U, 30U, 37U, 44U, 51U,
     58U, 59U, 52U, 45U, 38U, 31U, 39U, 46U,
     53U, 60U, 61U, 54U, 47U, 55U, 62U, 63U,
 };
 
 constexpr std::size_t jpeg_max_pixels = 16U * 1024U * 1024U;
+// JPEG caps the number of 8x8 blocks in one minimum coded unit at ten.
 constexpr std::size_t jpeg_max_blocks_per_mcu = 10U;
 
 struct HuffmanTable {
