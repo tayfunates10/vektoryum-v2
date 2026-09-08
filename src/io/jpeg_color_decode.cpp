@@ -69,6 +69,12 @@ struct ComponentPlane {
     std::vector<std::uint8_t> samples{};
 };
 
+struct AxisBlend {
+    std::size_t first{};
+    std::size_t second{};
+    double second_weight{};
+};
+
 [[nodiscard]] RasterDecodeResult fail(RasterDecodeError error) noexcept {
     return {error, {}};
 }
@@ -371,6 +377,25 @@ private:
     return static_cast<std::uint8_t>(std::clamp(std::lround(value), 0L, 255L));
 }
 
+[[nodiscard]] AxisBlend axis_blend(
+    std::size_t output,
+    std::uint8_t factor,
+    std::uint8_t max_factor,
+    std::size_t logical_size) noexcept {
+    if (factor == max_factor) {
+        const std::size_t index = std::min(output, logical_size - 1U);
+        return {index, index, 0.0};
+    }
+
+    const std::size_t current = std::min(output / 2U, logical_size - 1U);
+    if ((output & 1U) == 0U) {
+        const std::size_t previous = current == 0U ? current : current - 1U;
+        return {previous, current, 0.875};
+    }
+    const std::size_t next = std::min(current + 1U, logical_size - 1U);
+    return {current, next, 0.125};
+}
+
 [[nodiscard]] double sample_component(
     const ComponentPlane& plane,
     std::size_t x,
@@ -379,27 +404,15 @@ private:
     std::uint8_t v,
     std::uint8_t max_h,
     std::uint8_t max_v) noexcept {
-    if (h == max_h && v == max_v) {
-        return static_cast<double>(plane.samples[y * plane.width + x]);
-    }
-
-    const double source_x =
-        (static_cast<double>(x) + 0.5) * static_cast<double>(h) / static_cast<double>(max_h) - 0.5;
-    const double source_y =
-        (static_cast<double>(y) + 0.5) * static_cast<double>(v) / static_cast<double>(max_v) - 0.5;
-    const double clamped_x = std::clamp(source_x, 0.0, static_cast<double>(plane.logical_width - 1U));
-    const double clamped_y = std::clamp(source_y, 0.0, static_cast<double>(plane.logical_height - 1U));
-    const std::size_t x0 = static_cast<std::size_t>(std::floor(clamped_x));
-    const std::size_t y0 = static_cast<std::size_t>(std::floor(clamped_y));
-    const std::size_t x1 = std::min(x0 + 1U, plane.logical_width - 1U);
-    const std::size_t y1 = std::min(y0 + 1U, plane.logical_height - 1U);
-    const double wx = clamped_x - static_cast<double>(x0);
-    const double wy = clamped_y - static_cast<double>(y0);
-    const double top = (1.0 - wx) * static_cast<double>(plane.samples[y0 * plane.width + x0]) +
-                       wx * static_cast<double>(plane.samples[y0 * plane.width + x1]);
-    const double bottom = (1.0 - wx) * static_cast<double>(plane.samples[y1 * plane.width + x0]) +
-                          wx * static_cast<double>(plane.samples[y1 * plane.width + x1]);
-    return (1.0 - wy) * top + wy * bottom;
+    const AxisBlend xb = axis_blend(x, h, max_h, plane.logical_width);
+    const AxisBlend yb = axis_blend(y, v, max_v, plane.logical_height);
+    const double top =
+        (1.0 - xb.second_weight) * static_cast<double>(plane.samples[yb.first * plane.width + xb.first]) +
+        xb.second_weight * static_cast<double>(plane.samples[yb.first * plane.width + xb.second]);
+    const double bottom =
+        (1.0 - xb.second_weight) * static_cast<double>(plane.samples[yb.second * plane.width + xb.first]) +
+        xb.second_weight * static_cast<double>(plane.samples[yb.second * plane.width + xb.second]);
+    return (1.0 - yb.second_weight) * top + yb.second_weight * bottom;
 }
 
 [[nodiscard]] RasterDecodeResult decode_color_scan(
