@@ -390,10 +390,10 @@ private:
     const std::size_t current = std::min(output / 2U, logical_size - 1U);
     if ((output & 1U) == 0U) {
         const std::size_t previous = current == 0U ? current : current - 1U;
-        return {previous, current, 0.875};
+        return {previous, current, 0.75};
     }
     const std::size_t next = std::min(current + 1U, logical_size - 1U);
-    return {current, next, 0.125};
+    return {current, next, 0.25};
 }
 
 [[nodiscard]] double sample_component(
